@@ -343,6 +343,10 @@ with the flag off.
   until a one-time `pnpm husky` (`git config core.hooksPath` then says
   `.husky/_`). CI sets `HUSKY=0` for release-it's own commit. `CHANGELOG.md`
   is oxfmt-ignored: it is generated in conventional-changelog's Markdown.
+  `release.yml` releases with the built-in `GITHUB_TOKEN` (the releaser is
+  `github-actions[bot]`), whose pushes never trigger other workflows: a
+  workflow that must run on the `v*` tag needs a personal access token, as
+  in the OS.
 
 ### Conventions
 

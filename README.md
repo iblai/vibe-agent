@@ -191,7 +191,7 @@ Stores: `/iblai-vibe-ops-release` generates a Makefile and Fastlane config (`mak
 
 Releases are automated with [release-it](https://github.com/release-it/release-it), the way the OS does it. Every push to `main` runs `.github/workflows/release.yml`: it reads the conventional commit subjects since the last tag, bumps the version in `package.json` (`feat:` minor, `fix:` patch, a `!` or a `BREAKING CHANGE` footer major, anything else patch), prepends the entries to `CHANGELOG.md`, commits `chore(release): vX.Y.Z`, tags `vX.Y.Z` and publishes a GitHub Release with the same notes. The release commit is skipped by the workflow, so there is no loop. Only typed subjects reach the changelog, which is what the commitlint hook in `.husky/commit-msg` enforces. The first release, made while no `v*` tag exists, is 1.0.0.
 
-The workflow needs one repository secret, `GIT_TOKEN`: a personal access token with `repo` scope, as in `iblai/os` and `iblai/hq`. A push made with the built-in `GITHUB_TOKEN` cannot trigger other workflows or pass branch protection; without the secret the job fails at checkout.
+Nothing to configure: the job releases with the built-in `GITHUB_TOKEN`, so the release commit, the tag and the GitHub Release show as `github-actions[bot]`. Pushes made with that token never trigger other workflows; a workflow that must run on the `v*` tag would need a personal access token instead, as the OS uses.
 
 Never edit `CHANGELOG.md` or the `package.json` version by hand. `pnpm release` is for CI; locally use `pnpm release --dry-run --git.pushRepo=<remote>` to preview (release-it expects `origin`). The desktop shell is versioned on its own: `src-tauri/tauri.conf.json` is set by hand and built on demand, see above.
 

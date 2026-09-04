@@ -5,9 +5,10 @@ name: Release
 # last tag; then the release commit, the v<version> tag and the GitHub Release
 # are pushed. The first release, made while no v* tag exists, is 1.0.0.
 #
-# GIT_TOKEN is a personal access token with repo scope, as in iblai/os and
-# iblai/hq: a push made with GITHUB_TOKEN cannot trigger other workflows or pass
-# branch protection. Without the secret the checkout step fails.
+# The release is made by github-actions[bot] with the built-in GITHUB_TOKEN
+# under `permissions: contents: write`; nothing to configure. Pushes made with
+# that token never trigger other workflows, so a workflow that must run on the
+# v* tag would need a personal access token instead, as the OS uses.
 
 on:
   push:
@@ -30,7 +31,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GIT_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -50,7 +50,7 @@ jobs:
 
       - name: Run release-it
         env:
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HUSKY: "0"
         run: |
           set -euo pipefail
