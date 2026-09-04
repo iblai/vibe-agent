@@ -24,6 +24,13 @@ A single-tenant app on the ibl.ai platform: users sign in with ibl.ai SSO and ch
 
 vibe-agent fronts one agent on the [ibl.ai](https://ibl.ai) platform for one tenant. A creator (the tenant admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **tenant admins** (the creator and their staff) bypass the paywall, see Analytics in Admin mode and answer the one setup question; **members** pay on `/paywall` only when the admin chose a fee, and chat on `/`. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
 
+## Screenshots
+
+| Screen | |
+| --- | --- |
+| **Chat, with the canvas open** | ![Chat with the agent, canvas open](docs/screenshots/agent-caveman.png) |
+| **Analytics · Users** | ![Analytics — Users](docs/screenshots/user-analytics.png) |
+
 ## Features
 
 | Feature               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
