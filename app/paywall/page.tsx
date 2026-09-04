@@ -9,7 +9,7 @@ import { LoadingScreen } from "@/components/loading-screen";
 import { BuyButton, PaywallAutoVerify, RestoreAccessButton } from "./paywall-actions";
 
 // The plans come from /api/paywall/prices: PAYWALL_PRICE_IDS if set, else the
-// choice the admin made at /setup (tenant metadata, apps.<slug>).
+// choice the admin made at /setup (platform metadata, apps.<slug>).
 export default function PaywallPage() {
   const [catalogue, setCatalogue] = useState<CatalogueView | null>(null);
   const [error, setError] = useState("");

@@ -6,7 +6,7 @@
  * Wrap your root layout children with <IblaiProviders> to get:
  *  - Redux store (RTK Query for IBL APIs)
  *  - AuthProvider  (SSO redirect, JWT validation, cross-SPA sync)
- *  - TenantProvider (multi-tenant routing)
+ *  - TenantProvider (multi-platform routing)
  *
  * Usage in app/layout.tsx:
  *
@@ -84,7 +84,7 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // TenantProvider reports a user it could not place in the pinned tenant
+  // TenantProvider reports a user it could not place in the pinned platform
   // through onAuthFailure and then stays in its loading state, so the message
   // has to come from the fallback we hand it.
   const [authFailure, setAuthFailure] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
     return "";
   }, [isInitialized]);
 
-  // Tenant resolution: env only (single-tenant app).
+  // Platform resolution: env only (single-platform app).
   const tenantKey = useMemo(() => resolveAppTenant(), [isInitialized]);
 
   const isSsoRoute = pathname?.startsWith("/sso-login") ?? false;
@@ -109,7 +109,7 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
 
   if (!isInitialized || !mounted) return LOADING;
 
-  // Single-tenant app: no tenant means misconfiguration, not "pick one".
+  // Single-platform app: no platform means misconfiguration, not "pick one".
   if (!tenantKey) {
     return (
       <p role="alert" className="p-8 text-sm text-destructive">
@@ -150,13 +150,13 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
               localStorage.setItem("current_tenant", key);
               localStorage.setItem("tenant", key);
 
-              // If the SDK resolved a different tenant than what the app
-              // expects, redirect to re-login for the correct tenant.
+              // If the SDK resolved a different platform than what the app
+              // expects, redirect to re-login for the correct platform.
               checkTenantMismatch();
             }}
             saveUserTenants={(t: unknown) => localStorage.setItem("tenants", JSON.stringify(t))}
-            // TenantProvider re-authenticates against the requested tenant and
-            // hands back a fresh, tenant-scoped token pair. Without persisting it
+            // TenantProvider re-authenticates against the requested platform and
+            // hands back a fresh, platform-scoped token pair. Without persisting it
             // the next membership check still runs on the pre-switch tokens, so
             // the provider loops on
             //   "User still does not belong to tenant after re-auth"

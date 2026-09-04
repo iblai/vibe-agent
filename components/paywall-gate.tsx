@@ -27,7 +27,7 @@ export function PaywallGate({ children }: { children: ReactNode }) {
   // navigations; the DM stays the entitlement authority.
   const [ok, setOk] = useState(() => {
     if (typeof window === "undefined") return false;
-    // Tenant admins (the creator and their staff) skip the pay gate — UI-only,
+    // Platform admins (the creator and their staff) skip the pay gate — UI-only,
     // the DM stays the entitlement authority for everyone else — and get the
     // setup question instead, once per session, until they have answered it.
     if (isTenantAdmin()) return setupSettled();

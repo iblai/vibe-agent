@@ -17,7 +17,7 @@ export async function adminCaller(req: Request): Promise<AdminCaller | NextRespo
 export const isResponse = (x: unknown): x is NextResponse => x instanceof NextResponse;
 
 /**
- * DM statuses pass through verbatim (403 = not a tenant admin, 400 = no
+ * DM statuses pass through verbatim (403 = not a platform admin, 400 = no
  * `stripe` credential, 502 = Stripe rejected the key). Anything else is a
  * real bug: rethrow.
  */

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 /**
- * The app's paywall choice lives in the tenant's PUBLIC platform metadata
+ * The app's paywall choice lives in the platform's PUBLIC metadata
  * (apps.<slug>). These tests pin: the read needs no credential and is cached;
  * the write is one deep-merge PUT with the admin's own token and every key
  * present; env > metadata > nothing when resolving what is for sale; and
@@ -129,7 +129,7 @@ describe("writeAppPaymentInfo", () => {
 });
 
 describe("resolveCatalogue / allowedPriceIds", () => {
-  it("is undecided and free when the tenant has no entry", async () => {
+  it("is undecided and free when the platform has no entry", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async () => metadataResponse({})),

@@ -530,10 +530,10 @@ fn allow_in_app_purchase() -> bool {
     }
 }
 
-/// The tenant key this build is locked to, injected at build time via the
+/// The platform key this build is locked to, injected at build time via the
 /// `IBL_TENANT` env var. Returns an empty string when unset (normal
-/// multi-tenant behaviour); a non-empty value tells the frontend to force the
-/// user onto that tenant and hide tenant switching.
+/// multi-platform behaviour); a non-empty value tells the frontend to force the
+/// user onto that platform and hide platform switching.
 #[tauri::command]
 fn get_locked_tenant() -> String {
     option_env!("IBL_TENANT").unwrap_or("").trim().to_string()

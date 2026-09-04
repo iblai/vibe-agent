@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 /**
- * lib/iblai/tenant.ts: this is a single-tenant app. The tenant comes from
- * NEXT_PUBLIC_MAIN_TENANT_KEY alone; a tenant left in localStorage by another
+ * lib/iblai/tenant.ts: this is a single-platform app. The platform comes from
+ * NEXT_PUBLIC_MAIN_TENANT_KEY alone; a platform left in localStorage by another
  * vibe app on the same origin must never win, and a missing or placeholder key
  * resolves to "" so the providers can fail loudly.
  */
@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe("resolveAppTenant", () => {
-  it("returns the env tenant even when localStorage holds another app's tenant", async () => {
+  it("returns the env platform even when localStorage holds another app's platform", async () => {
     process.env[ENV_KEY] = "acme";
     localStorage.setItem("app_tenant", "other-app");
     localStorage.setItem("tenant", "other-sdk");
@@ -71,7 +71,7 @@ describe("resolveAppTenant", () => {
 });
 
 describe("isTenantAdmin", () => {
-  it("is true only for is_admin on the pinned tenant", async () => {
+  it("is true only for is_admin on the pinned platform", async () => {
     process.env[ENV_KEY] = "acme";
     const { isTenantAdmin } = await loadTenant();
     localStorage.setItem(

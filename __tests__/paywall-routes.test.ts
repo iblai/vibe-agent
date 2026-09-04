@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 /**
  * The /api/paywall route handlers are the only holders of the org-wide
- * Api-Token and the only writers of the tenant's paywall choice, so their
+ * Api-Token and the only writers of the platform's paywall choice, so their
  * contracts are load-bearing: auth-first 401s, a LOUD 500 when
  * PAYWALL_APP_SLUG is missing (misconfiguration must fail visibly the moment
  * a route is used, never silently grant), "nothing for sale means everyone
@@ -51,7 +51,7 @@ const monthly = (over: Record<string, unknown> = {}) => ({
 });
 
 /**
- * fetch stub: token/verify answers identity; the tenant metadata URL answers
+ * fetch stub: token/verify answers identity; the platform metadata URL answers
  * with `apps` (and records PUTs); everything else is "the DM" (Stripe proxy).
  * Every stub starts a fresh call log — tests re-stub mid-test.
  */
@@ -359,7 +359,7 @@ describe("POST /api/paywall/admin/setup", () => {
   it("free: records the choice without any Stripe call, even after a paid plan", async () => {
     stubFetch({
       apps: { "demo-app": monthly() },
-      // Any proxy call throws: free must never need the tenant's Stripe key.
+      // Any proxy call throws: free must never need the platform's Stripe key.
       dm: stripeDm({}),
     });
     const { POST } = await loadSetup();

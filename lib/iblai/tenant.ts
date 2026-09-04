@@ -1,7 +1,7 @@
 /**
- * Tenant resolution for a single-tenant ibl.ai app.
+ * Platform resolution for a single-platform ibl.ai app.
  *
- * The tenant comes from NEXT_PUBLIC_MAIN_TENANT_KEY only. A tenant left in
+ * The platform comes from NEXT_PUBLIC_MAIN_TENANT_KEY only. A platform left in
  * localStorage (every vibe-starter app on this origin writes one) is never
  * consulted, and a missing or placeholder key resolves to "" so the providers
  * can fail loudly instead of adopting whatever the SDK finds.
@@ -19,17 +19,17 @@ const PLACEHOLDER_PLATFORMS = new Set([
   "",
 ]);
 
-/** The app's tenant key from env, or "" when unset or still a placeholder. */
+/** The app's platform key from env, or "" when unset or still a placeholder. */
 export function resolveAppTenant(): string {
   const envTenant = config.mainTenantKey();
   return envTenant && !PLACEHOLDER_PLATFORMS.has(envTenant) ? envTenant : "";
 }
 
 /**
- * Check if the SDK's current tenant matches the app's pinned tenant.
+ * Check if the SDK's current platform matches the app's pinned platform.
  *
  * If they differ, redirect to the auth SPA to re-login for the correct
- * tenant. Returns `true` if a redirect was triggered (caller should stop
+ * platform. Returns `true` if a redirect was triggered (caller should stop
  * rendering).
  */
 export function checkTenantMismatch(): boolean {
@@ -39,7 +39,7 @@ export function checkTenantMismatch(): boolean {
   const sdkTenant = localStorage.getItem("tenant") ?? "";
 
   if (appTenant && sdkTenant && sdkTenant !== appTenant) {
-    // Use dynamic import to avoid hard dependency on auth-utils from tenant module.
+    // Use dynamic import to avoid hard dependency on auth-utils from this module.
     void import("./auth-utils").then(({ redirectToAuthSpa }) => {
       void redirectToAuthSpa(undefined, appTenant, false, false);
     });
@@ -49,7 +49,7 @@ export function checkTenantMismatch(): boolean {
 }
 
 /**
- * Whether the signed-in user is an admin of the app's tenant, from the
+ * Whether the signed-in user is an admin of the app's platform, from the
  * `tenants` list SsoLogin / TenantProvider persist. Not the SDK's
  * `useIsAdmin()`: that JSON-parses `current_tenant`, which this app stores
  * as a plain key string.

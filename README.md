@@ -6,7 +6,7 @@
 
 **One creator, one AI agent, one paywall.**
 
-A single-tenant app on the ibl.ai platform: users sign in with ibl.ai SSO and chat with one agent, and access to the chat is sold on the tenant's own Stripe account. Built from [iblai/vibe](https://github.com/iblai/vibe)'s `vibe-starter` template on the [@iblai/iblai-js](https://www.npmjs.com/package/@iblai/iblai-js) SDK.
+A single-platform app on ibl.ai: users sign in with ibl.ai SSO and chat with one agent, and access to the chat is sold on the platform's own Stripe account. Built from [iblai/vibe](https://github.com/iblai/vibe)'s `vibe-starter` template on the [@iblai/iblai-js](https://www.npmjs.com/package/@iblai/iblai-js) SDK.
 
 [![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -22,33 +22,33 @@ A single-tenant app on the ibl.ai platform: users sign in with ibl.ai SSO and ch
 
 <!-- Once deployed: "vibe-agent is deployed at [<host>](https://<host>)." -->
 
-vibe-agent fronts one agent on the [ibl.ai](https://ibl.ai) platform for one tenant. A creator (the tenant admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **tenant admins** (the creator and their staff) bypass the paywall, see Analytics in Admin mode and answer the one setup question; **members** pay on `/paywall` only when the admin chose a fee, and chat on `/`. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
+vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) bypass the paywall, see Analytics in Admin mode and answer the one setup question; **members** pay on `/paywall` only when the admin chose a fee, and chat on `/`. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
 
 ## Screenshots
 
-| Screen | |
-| --- | --- |
+| Screen                         |                                                                         |
+| ------------------------------ | ----------------------------------------------------------------------- |
 | **Chat, with the canvas open** | ![Chat with the agent, canvas open](docs/screenshots/agent-caveman.png) |
-| **Analytics · Users** | ![Analytics — Users](docs/screenshots/user-analytics.png) |
+| **Analytics · Users**          | ![Analytics — Users](docs/screenshots/user-analytics.png)               |
 
 ## Features
 
-| Feature               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Chat**              | `/` — the SDK `Chat` with the one agent (`NEXT_PUBLIC_DEFAULT_AGENT_ID`): streaming, sessions, files, voice. Paying users and tenant admins.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Sidebar**           | The SDK `PlatformSidebar` — the shell the ibl.ai OS and LMS use — with this app's content: **New chat**, **Recents** (pinned chats first; each row can be pinned, unpinned or deleted) and, for admins in Admin mode, the **Analytics** menu. The bottom-left cluster is the SDK's: Notifications and Support for everyone, plus Invites, Management, Integrations, Monetization (when the tenant sells credits) and Advanced for admins in Admin mode; the last four open the platform's account sheet in place. Collapses to an icon rail (Cmd/Ctrl+B), a drawer on phones. |
-| **Analytics**         | `/analytics/*` — the OS analytics section for this one agent: Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports (SDK `AnalyticsLayout` + stats components). Tenant admins, in Admin mode.                                                                                                                                                                                                                                                                                                                                                              |
-| **Paywall**           | `/paywall` — pricing page, Stripe Checkout on the tenant's own Stripe account, restore access. The platform owns entitlement; free access never needs a Stripe key.                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Setup**             | `/setup` — one question: free access, one-time fee or monthly fee (USD); the Stripe product and price are created for you. Opens itself for a tenant admin until answered; reachable later from the quiet "Payments setup" link on `/account`.                                                                                                                                                                                                                                                                                                                                |
-| **User / Admin mode** | Tenant admins get a User / Admin switch in the navbar (in the profile menu on narrow screens). User mode shows the app as a member sees it; Analytics and the admin cluster exist only in Admin mode. Starts on Admin, resets on reload.                                                                                                                                                                                                                                                                                                                                      |
-| **Profile**           | `/profile` — the SDK `Profile` panel, from the profile dropdown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **Account**           | `/account` — the SDK `Account` panel (organization settings), admins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **Notifications**     | `/notifications` — the SDK notification centre, from the bell.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **About**             | `/about` — off by default; `NEXT_PUBLIC_SHOW_ABOUT=true` enables it. The agent's public profile plus your copy (`ABOUT_COPY` in `app/(app)/about/page.tsx`).                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Branding**          | The logo in the sidebar header (and in the navbar on phones) is the org logo set in the tenant's platform org settings, falling back to the ibl.ai mark.                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **SSO**               | Login via iblai.app — no tokens to manage. Every origin the app runs on must be in the tenant's allowed redirect origins.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Feature               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**              | `/` — the SDK `Chat` with the one agent (`NEXT_PUBLIC_DEFAULT_AGENT_ID`): streaming, sessions, files, voice. Paying users and platform admins.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Sidebar**           | The SDK `PlatformSidebar` — the shell the ibl.ai OS and LMS use — with this app's content: **New chat**, **Recents** (pinned chats first; each row can be pinned, unpinned or deleted) and, for admins in Admin mode, the **Analytics** menu. The bottom-left cluster is the SDK's: Notifications and Support for everyone, plus Invites, Management, Integrations, Monetization (when the platform sells credits) and Advanced for admins in Admin mode; the last four open the platform's account sheet in place. Collapses to an icon rail (Cmd/Ctrl+B), a drawer on phones. |
+| **Analytics**         | `/analytics/*` — the OS analytics section for this one agent: Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports (SDK `AnalyticsLayout` + stats components). Platform admins, in Admin mode.                                                                                                                                                                                                                                                                                                                                                              |
+| **Paywall**           | `/paywall` — pricing page, Stripe Checkout on the platform's own Stripe account, restore access. The platform owns entitlement; free access never needs a Stripe key.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Setup**             | `/setup` — one question: free access, one-time fee or monthly fee (USD); the Stripe product and price are created for you. Opens itself for a platform admin until answered; reachable later from the quiet "Payments setup" link on `/account`.                                                                                                                                                                                                                                                                                                                                |
+| **User / Admin mode** | Platform admins get a User / Admin switch in the navbar (in the profile menu on narrow screens). User mode shows the app as a member sees it; Analytics and the admin cluster exist only in Admin mode. Starts on Admin, resets on reload.                                                                                                                                                                                                                                                                                                                                      |
+| **Profile**           | `/profile` — the SDK `Profile` panel, from the profile dropdown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **Account**           | `/account` — the SDK `Account` panel (organization settings), admins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Notifications**     | `/notifications` — the SDK notification centre, from the bell.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **About**             | `/about` — off by default; `NEXT_PUBLIC_SHOW_ABOUT=true` enables it. The agent's public profile plus your copy (`ABOUT_COPY` in `app/(app)/about/page.tsx`).                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Branding**          | The logo in the sidebar header (and in the navbar on phones) is the org logo set in the platform's org settings, falling back to the ibl.ai mark.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **SSO**               | Login via iblai.app — no tokens to manage. Every origin the app runs on must be in the platform's allowed redirect origins.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-The paywall boundary is the route group: everything under `app/(app)/(paid)/` renders inside `PaywallGate`. `/paywall` must stay outside that group or the gate loops. Tenant admins bypass the gate.
+The paywall boundary is the route group: everything under `app/(app)/(paid)/` renders inside `PaywallGate`. `/paywall` must stay outside that group or the gate loops. Platform admins bypass the gate.
 
 ## AGENTS.md / CLAUDE.md
 
@@ -59,8 +59,8 @@ The paywall boundary is the route group: everything under `app/(app)/(paid)/` re
 ### Prerequisites
 
 - Node.js 20 or newer (22 is what this app is built with) and pnpm
-- An ibl.ai tenant (org key) and a Platform API Token — sign up at [ibl.ai/join](https://ibl.ai/join)
-- An agent created on [os.ibl.ai](https://os.ibl.ai): its uuid is the last path segment of `https://os.ibl.ai/platform/<tenant>/<agent-uuid>`
+- An ibl.ai platform (org key) and a Platform API Token — sign up at [ibl.ai/join](https://ibl.ai/join)
+- An agent created on [os.ibl.ai](https://os.ibl.ai): its uuid is the last path segment of `https://os.ibl.ai/platform/<platform-key>/<agent-uuid>`
 
 ### Install & Run
 
@@ -78,7 +78,7 @@ The paywall boundary is the route group: everything under `app/(app)/(paid)/` re
    cp .env.example .env.local
    ```
 
-   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`), `IBLAI_API_KEY` (= `TOKEN`) and `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the agent uuid). The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. The tenant comes from that env var only: a missing or placeholder key shows an alert instead of an app, and a tenant left in localStorage by another vibe app on the same origin is ignored.
+   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`), `IBLAI_API_KEY` (= `TOKEN`) and `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the agent uuid). The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. The platform comes from that env var only: a missing or placeholder key shows an alert instead of an app, and a platform left in localStorage by another vibe app on the same origin is ignored.
 
 3. Install and run:
 
@@ -87,7 +87,7 @@ The paywall boundary is the route group: everything under `app/(app)/(paid)/` re
    pnpm dev
    ```
 
-   Open http://localhost:3000 and sign in. Every origin the app runs on (localhost and the deployed one) must be in the tenant's allowed redirect origins, or sign-in never comes back.
+   Open http://localhost:3000 and sign in. Every origin the app runs on (localhost and the deployed one) must be in the platform's allowed redirect origins, or sign-in never comes back.
 
 ### Build
 
@@ -98,14 +98,14 @@ pnpm start
 
 ## Paywall
 
-The platform (DM) owns entitlement: it mints Stripe Checkout sessions on the tenant's own Stripe key, records payments, and checks subscriptions live. No Stripe Connect, no commission, no webhooks. The app has the server routes under `app/api/paywall/`, one client gate (`components/paywall-gate.tsx`), the pricing page (`app/paywall/`) and the setup screen (`app/setup`, `components/setup/setup-screen.tsx`). The buyer-side routes are the `/iblai-vibe-monetization-app-paywall` skill from `iblai/vibe`; the setup screen and the setup route are this app's.
+The platform (DM) owns entitlement: it mints Stripe Checkout sessions on the platform's own Stripe key, records payments, and checks subscriptions live. No Stripe Connect, no commission, no webhooks. The app has the server routes under `app/api/paywall/`, one client gate (`components/paywall-gate.tsx`), the pricing page (`app/paywall/`) and the setup screen (`app/setup`, `components/setup/setup-screen.tsx`). The buyer-side routes are the `/iblai-vibe-monetization-app-paywall` skill from `iblai/vibe`; the setup screen and the setup route are this app's.
 
-Setup is one question, asked of a tenant admin the first time they open the app (and reachable later from the quiet "Payments setup" link on `/account`):
+Setup is one question, asked of a platform admin the first time they open the app (and reachable later from the quiet "Payments setup" link on `/account`):
 
 - **Free access** — anyone signed in can use the agent. No Stripe needed, ever.
-- **One-time fee** or **Monthly fee** — enter the price (USD). The first time, a second screen ("Monetize Your Agent") asks for a **restricted** Stripe key (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions). It is saved as the tenant's `stripe` integration credential on the platform, browser to platform; this app's server never sees it.
+- **One-time fee** or **Monthly fee** — enter the price (USD). The first time, a second screen ("Monetize Your Agent") asks for a **restricted** Stripe key (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions). It is saved as the platform's `stripe` integration credential on the platform, browser to platform; this app's server never sees it.
 
-For a paid answer, Save creates the Stripe product (named after the platform, tagged `metadata.app = PAYWALL_APP_SLUG`, which is what the platform checks at checkout) and the price, retires the previous price if the answer changed, and records the choice in the tenant's platform metadata under `apps.<PAYWALL_APP_SLUG>`. Free records the choice and touches Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
+For a paid answer, Save creates the Stripe product (named after the platform, tagged `metadata.app = PAYWALL_APP_SLUG`, which is what the platform checks at checkout) and the price, retires the previous price if the answer changed, and records the choice in the platform's metadata under `apps.<PAYWALL_APP_SLUG>`. Free records the choice and touches Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
 
 ```json
 {
@@ -148,7 +148,7 @@ Then `PAYWALL_PRICE_IDS=price_xxx,price_yyy` in `.env.local`: the pricing page d
 
 `/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`; confirm it carries `IBLAI_API_KEY` and `PAYWALL_APP_SLUG` (plus `PAYWALL_PRICE_IDS` if you use the override), or the paywall routes 500 in production. Server mode is required: never set `output: 'export'`. Afterwards:
 
-- add the deployed origin to the tenant's allowed redirect origins;
+- add the deployed origin to the platform's allowed redirect origins;
 - put it in `src-tauri/tauri.conf.json` → `build.frontendDist` (see below).
 
 ## Native apps (Tauri v2)
@@ -185,18 +185,18 @@ Mobile SSO cannot return from an `https://` page into a native app, so it comes 
 
 Signed desktop releases: copy `desktop-signing.env.example` to `desktop-signing.env`, then `make -f desktop-release.mk macos-dmg` (signed and notarized universal DMG) or `make -f desktop-release.mk windows-nsis`. `.github/workflows/tauri-build-desktop.yml` builds unsigned macOS, Windows and Linux artifacts on demand (Actions → Run workflow). The signed release workflows that trigger on `app-v*` tags are in `/iblai-vibe-ops-build`'s `assets/tauri/workflows/`.
 
-Stores: `/iblai-vibe-ops-release` generates a Makefile and Fastlane config (`make ios-release`, `make android-release`); `/iblai-vibe-windows-msix` packages an MSIX for the Microsoft Store. A binary locked to one tenant: `IBL_TENANT=<key> pnpm exec tauri build`.
+Stores: `/iblai-vibe-ops-release` generates a Makefile and Fastlane config (`make ios-release`, `make android-release`); `/iblai-vibe-windows-msix` packages an MSIX for the Microsoft Store. A binary locked to one platform: `IBL_TENANT=<key> pnpm exec tauri build`.
 
 ## Testing
 
-| Command                                | Does                                                                                                           |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`, `pnpm build`, `pnpm start` | Next.js with Turbopack. `next build` type-checks with the project-local TypeScript 7 `tsc`                     |
-| `pnpm typecheck`                       | `oxlint --type-check` (tsgo diagnostics)                                                                       |
-| `pnpm lint`, `pnpm check`              | `oxlint --type-aware`; lint plus typecheck                                                                     |
-| `pnpm fmt`, `pnpm fmt:check`           | oxfmt                                                                                                          |
-| `pnpm test`                            | vitest (config, source paths, tenant, paywall helpers, tenant-metadata store, route handlers, chat-row labels) |
-| `pnpm test:e2e`                        | Playwright against real SSO (credentials in `e2e/.env.development`)                                            |
+| Command                                | Does                                                                                                                          |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`, `pnpm build`, `pnpm start` | Next.js with Turbopack. `next build` type-checks with the project-local TypeScript 7 `tsc`                                    |
+| `pnpm typecheck`                       | `oxlint --type-check` (tsgo diagnostics)                                                                                      |
+| `pnpm lint`, `pnpm check`              | `oxlint --type-aware`; lint plus typecheck                                                                                    |
+| `pnpm fmt`, `pnpm fmt:check`           | oxfmt                                                                                                                         |
+| `pnpm test`                            | vitest (config, source paths, platform resolution, paywall helpers, platform-metadata store, route handlers, chat-row labels) |
+| `pnpm test:e2e`                        | Playwright against real SSO (credentials in `e2e/.env.development`)                                                           |
 
 Run `pnpm check`, `pnpm test` and `pnpm build` before a pull request; `pnpm test:e2e` when you change a user journey.
 
@@ -227,7 +227,7 @@ components/
 ├── loading-screen.tsx                  # The one loading / busy screen (OS look)
 └── plan-card.tsx
 lib/
-├── paywall.ts  paywall-admin.ts        # Server-only: platform calls, tenant-metadata store, catalogue
+├── paywall.ts  paywall-admin.ts        # Server-only: platform calls, platform-metadata store, catalogue
 ├── paywall-client.ts                   # Browser side: token header, catalogue fetch, setup checks
 ├── chat-rows.ts                        # Recents row labels
 └── iblai/                              # config.ts (env), tenant.ts, admin-mode.tsx, auth-utils.ts, storage-service.ts
@@ -268,7 +268,7 @@ src-tauri/                              # Thin WebView shell for desktop and mob
 - **Host SDK panels the way the OS does** — full width, no card, the component's own background; read `AGENTS.md` before wrapping one
 - **Do not override SDK styles** — SDK components ship with their own styling
 - **Never set `output: 'export'`** — the paywall needs the server routes
-- **`IBLAI_API_KEY` and `PAYWALL_*` are server-only** — never `NEXT_PUBLIC_`, never read outside route handlers; secrets never go into tenant metadata
+- **`IBLAI_API_KEY` and `PAYWALL_*` are server-only** — never `NEXT_PUBLIC_`, never read outside route handlers; secrets never go into platform metadata
 - **A new env key lands in `.env.example` and this README** in the same change; a new route lands with a test in `__tests__/`
 - **Use `pnpm`** as the package manager
 

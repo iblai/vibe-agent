@@ -131,7 +131,7 @@ export function toCataloguePrice(price: any, product?: any): CataloguePrice {
   };
 }
 
-/** PAYWALL_PRICE_IDS, read at call time; it wins over the tenant's choice. */
+/** PAYWALL_PRICE_IDS, read at call time; it wins over the platform's choice. */
 export function envPriceIds(): string[] {
   return (process.env.PAYWALL_PRICE_IDS ?? "")
     .split(",")
@@ -140,8 +140,8 @@ export function envPriceIds(): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// The app's paywall choice, kept in the tenant's PUBLIC platform metadata under
-// apps.<slug>. The DM's tenant metadata is an unauthenticated read with an
+// The app's paywall choice, kept in the platform's PUBLIC metadata under
+// apps.<slug>. The DM's platform metadata is an unauthenticated read with an
 // admin-only, deep-merging write — so only ids and amounts live here, never
 // anything secret, and every key is written (nulls included) because the DM
 // cannot delete keys.
@@ -184,7 +184,7 @@ const isPaymentInfo = (x: unknown): x is AppPaymentInfo =>
   ACCESS_VALUES.includes((x as { access?: Access }).access as Access) &&
   typeof (x as { stripe?: unknown }).stripe === "object";
 
-/** apps.<slug> from the tenant's metadata — a public read, no credential. */
+/** apps.<slug> from the platform's metadata — a public read, no credential. */
 export async function readAppPaymentInfo(): Promise<InfoRead> {
   if (infoCache && Date.now() - infoCache.at < INFO_TTL_MS) return infoCache;
   const body = await dmJson(await fetch(metadataUrl(), { cache: "no-store" }));
@@ -210,7 +210,7 @@ export async function writeAppPaymentInfo(token: string, info: AppPaymentInfo): 
   invalidateAppPaymentInfo();
 }
 
-/** The ids this app may sell right now: env override, else the tenant's choice. */
+/** The ids this app may sell right now: env override, else the platform's choice. */
 export async function allowedPriceIds(): Promise<string[]> {
   const env = envPriceIds();
   if (env.length) return env;

@@ -21,7 +21,7 @@ import { adminCaller, failure, isResponse, jsonBody } from "../../../../../lib/p
  * Every platform call carries the admin's OWN token, so the DM decides who may
  * do this (403 otherwise). Paid order: retire the previous price → make sure
  * there is a product tagged for this app → create the price → record the
- * choice in the tenant metadata. Free makes ZERO Stripe calls, ever — it only
+ * choice in the platform metadata. Free makes ZERO Stripe calls, ever — it only
  * records the choice — because free must never need a Stripe key. A client
  * Idempotency-Key makes a retried submit safe.
  */
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     if (paid) {
       // 1. The previous price stops being sellable. Paid only: archiving needs
-      //    the tenant's Stripe key, which free must never require. A price left
+      //    the platform's Stripe key, which free must never require. A price left
       //    behind by a paid → free switch stays active on Stripe but is never
       //    sold — the app sells only the recorded price_id (null for free).
       if (current?.stripe.price_id)

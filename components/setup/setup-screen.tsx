@@ -35,7 +35,7 @@ const OPTIONS: { value: Access; title: string; detail: string }[] = [
   { value: "monthly", title: "Monthly fee", detail: "A subscription, cancelled any time." },
 ];
 
-// The platform's credential name for the tenant's own Stripe key (one field, `key`).
+// The platform's credential name for the platform's own Stripe key (one field, `key`).
 const CREDENTIAL = "stripe";
 
 const errorStatus = (e: unknown) =>
@@ -50,14 +50,14 @@ function setupMessage(e: unknown): string {
   if (e instanceof PaywallRequestError) {
     if (e.status === 502)
       return "Stripe rejected the key. Check it is a restricted key for the right account and try again.";
-    if (e.status === 403) return "Only tenant admins can set up payments.";
+    if (e.status === 403) return "Only platform admins can set up payments.";
   }
   return errorMessage(e);
 }
 
 /**
  * The one question: free, one-time or monthly (USD). A paid answer needs a
- * price and a Stripe restricted key on the tenant; when there is none (or the
+ * price and a Stripe restricted key on the platform; when there is none (or the
  * admin replaces it) a second screen asks for it — saved browser→platform
  * through the SDK hooks, never through this app's server. Save then lets
  * /api/paywall/admin/setup create the product and price and record the choice.

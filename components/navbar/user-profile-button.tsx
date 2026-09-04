@@ -49,7 +49,7 @@ export function UserProfileButton({
       showProfileTab={true}
       // The SDK only renders the Account item for admins.
       showAccountTab={true}
-      // Single-tenant app: the switcher would be a dead row.
+      // Single-platform app: the switcher would be a dead row.
       showTenantSwitcher={false}
       showHelpLink={false}
       showLogoutButton={true}

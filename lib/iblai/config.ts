@@ -3,7 +3,7 @@
  *
  * Hosted-iblai.app defaults live in code: with no env vars at all, every
  * service routes through https://api.iblai.app. `.env.local` (copied from
- * `.env.example`) holds the tenant key, IBLAI_API_KEY, and any self-hosted
+ * `.env.example`) holds the platform key, IBLAI_API_KEY, and any self-hosted
  * overrides.
  *
  * Supports two modes:
@@ -96,7 +96,7 @@ const config = {
   tauriCustomScheme: () => getEnv("NEXT_PUBLIC_TAURI_CUSTOM_SCHEME", ""),
 
   // The one agent this app fronts: the last path segment of an
-  // os.ibl.ai/platform/<tenant>/<agent-uuid> URL.
+  // os.ibl.ai/platform/<platform-key>/<agent-uuid> URL.
   defaultAgentId: () => getEnv("NEXT_PUBLIC_DEFAULT_AGENT_ID", ""),
   supportEmail: () => getEnv("NEXT_PUBLIC_SUPPORT_EMAIL", "support@ibl.ai"),
   // The About tab is off unless this is exactly "true".
@@ -107,7 +107,7 @@ const config = {
   // never inlines it into the client bundle — in the browser this returns "".
   // Use it from route handlers / server components for platform API calls
   // (`Authorization: Api-Token <key>`; on the OpenAI-compatible endpoints,
-  // `https://asgi.data.<domain>/api/ai-mentor/orgs/<tenant>/v1/*`, the same
+  // `https://asgi.data.<domain>/api/ai-mentor/orgs/<platform-key>/v1/*`, the same
   // key is also a standard OpenAI `Bearer` api key). Deliberately not routed
   // through getEnv/window.__ENV__, which are client-visible.
   apiKey: () => process.env.IBLAI_API_KEY ?? "",

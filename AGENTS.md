@@ -140,15 +140,15 @@ was learned building it.
 
 ### What it is
 
-One tenant, one agent, one paywall. A creator (the tenant admin on the ibl.ai
+One platform, one agent, one paywall. A creator (the platform admin on the ibl.ai
 platform) fronts a single agent with a chat app; if they choose to charge,
-members of the tenant pay through the creator's own Stripe account. Two kinds
+members of the platform pay through the creator's own Stripe account. Two kinds
 of users:
 
-- **Tenant admins** (the creator and their staff) bypass the paywall, see
+- **Platform admins** (the creator and their staff) bypass the paywall, see
   Analytics in Admin mode, and answer the one setup question at `/setup`. Admin
   means `isTenantAdmin()` in `lib/iblai/tenant.ts` (the `is_admin` flag on the
-  pinned tenant in `localStorage.tenants`), never the SDK `useIsAdmin()`.
+  pinned platform in `localStorage.tenants`), never the SDK `useIsAdmin()`.
 - **Members** sign in with SSO; they pay on `/paywall` only when the admin chose
   a fee, and chat on `/`.
 
@@ -163,7 +163,7 @@ of users:
 | `app/sso-login-complete/`                                                                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                   |
 | `app/api/paywall/{access,checkout,prices}/`                                                             | Buyer rail: the server calls the platform with `IBLAI_API_KEY`, as the buyer.                                                                                                                                                                                                                                         |
 | `app/api/paywall/admin/setup/`                                                                          | Admin rail: one route that, for a paid answer, retires the old price, ensures the tagged product and creates the price, then records the choice — forwarding the admin's own DM token. Free records the choice only: zero Stripe calls, so it never needs a key.                                                      |
-| `lib/paywall.ts`, `lib/paywall-admin.ts`                                                                | Server-only paywall code, including the tenant-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                  |
+| `lib/paywall.ts`, `lib/paywall-admin.ts`                                                                | Server-only paywall code, including the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                |
 | `lib/paywall-client.ts`, `components/paywall-gate.tsx`, `components/setup/`, `components/plan-card.tsx` | Browser side: the token header, the gate, the setup screen, the plan card.                                                                                                                                                                                                                                            |
 | `components/sidebar/`, `lib/chat-rows.ts`                                                               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows. |
 | `components/loading-screen.tsx`                                                                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                   |
@@ -173,11 +173,11 @@ of users:
 
 ### Invariants, and why
 
-- The tenant comes from `NEXT_PUBLIC_MAIN_TENANT_KEY` only (`resolveAppTenant()`).
+- The platform comes from `NEXT_PUBLIC_MAIN_TENANT_KEY` only (`resolveAppTenant()`).
   No localStorage fallback: every vibe app on localhost writes `app_tenant`, and it
   silently overrode env. A missing or placeholder key renders an alert.
 - The agent is `NEXT_PUBLIC_DEFAULT_AGENT_ID`. Never invent one; ask for the
-  `os.ibl.ai/platform/<tenant>/<uuid>` URL.
+  `os.ibl.ai/platform/<platform-key>/<uuid>` URL.
 - The SDK `<Chat>` must never remount except through its `key` (any other remount
   wedges voice input), and `reactStrictMode` stays `false` for the same SDK bug.
 - No static export, ever: the paywall needs the server routes. Native apps are a
@@ -187,10 +187,10 @@ of users:
   page under the streaming root layout answers 200.
 - `IBLAI_API_KEY` and `PAYWALL_*` are server-only. Never prefix them with
   `NEXT_PUBLIC_`; never read them outside route handlers.
-- Tenant admins bypass the gate on the client only. The platform stays the
+- Platform admins bypass the gate on the client only. The platform stays the
   entitlement authority for everyone else.
 - Nothing in the navbar for the setup: the way back is the quiet "Payments
-  setup" link on `/account` (rei's call).
+  setup" link on `/account`.
 - One sidebar context: the shell is the SDK's `SidebarProvider` →
   `PlatformSidebar` + `SidebarInset` from `@iblai/iblai-js/web-containers/next`
   (the LMS's structure). Never add a local shadcn sidebar copy — it is a
@@ -200,7 +200,7 @@ of users:
   `/?session=<id>` restores a chat, `/?new=<nonce>` starts one (both remount
   `<Chat>` through its `key`). It never dispatches into the chat slice.
 - Analytics (the sidebar menu and the pages) and the footer admin cluster key
-  on `isLiveAdmin` = tenant admin AND Admin mode. RBAC is off
+  on `isLiveAdmin` = platform admin AND Admin mode. RBAC is off
   (`enableRbac: false`), so the SDK's own footer visibility rules reduce to that
   flag: members get Notifications and Support, live admins the full cluster.
 - Scrolling, three kinds of page. Ordinary pages (About) never scroll a
@@ -213,27 +213,27 @@ of users:
   panes inert, scrolls the rail away and unpins Profile's Save bar.
   Notifications paints its own grey; Profile and Account are transparent and
   sit on white. Analytics is the full-bleed `#f5f7fb` surface that `main`
-  scrolls (rei's call).
+  scrolls.
 
 ### Paywall and setup, end to end
 
 Two auth rails, one boundary (`lib/paywall.ts`):
 
-| Call                                                           | Who calls the platform         | Credential                             | Path user                             |
-| -------------------------------------------------------------- | ------------------------------ | -------------------------------------- | ------------------------------------- |
-| access check, checkout, plan display                           | this server                    | `Api-Token IBLAI_API_KEY`              | the buyer, verified by `token/verify` |
-| read the tenant's choice                                       | this server                    | none: tenant metadata is a public read | none                                  |
-| retire/create product and price (paid only), record the choice | this server, from `/setup`     | the admin's own DM `Token`, forwarded  | the admin                             |
-| save the Stripe key                                            | the browser, through SDK hooks | the admin's own DM `Token`             | none                                  |
+| Call                                                           | Who calls the platform         | Credential                               | Path user                             |
+| -------------------------------------------------------------- | ------------------------------ | ---------------------------------------- | ------------------------------------- |
+| access check, checkout, plan display                           | this server                    | `Api-Token IBLAI_API_KEY`                | the buyer, verified by `token/verify` |
+| read the platform's choice                                     | this server                    | none: platform metadata is a public read | none                                  |
+| retire/create product and price (paid only), record the choice | this server, from `/setup`     | the admin's own DM `Token`, forwarded    | the admin                             |
+| save the Stripe key                                            | the browser, through SDK hooks | the admin's own DM `Token`               | none                                  |
 
 The platform's Stripe proxy (`…/providers/stripe/payments/*`) is admin-only for
-every verb and answers 403 otherwise, and so is the tenant-metadata write; so the
+every verb and answers 403 otherwise, and so is the platform-metadata write; so the
 setup route carries no admin check of its own — a 2xx from the platform is the
 proof. The platform allows checkout only for a price on an active product whose
 `metadata.app` equals `PAYWALL_APP_SLUG`; the setup route tags the product it
 creates.
 
-The choice lives in the tenant's platform metadata under `apps.<slug>`
+The choice lives in the platform's metadata under `apps.<slug>`
 (`AppPaymentInfo` in `lib/paywall.ts`: `access` free / one_time / monthly,
 `amount` in cents, `currency` always `usd`, `stripe.product_id`,
 `stripe.price_id`, `updated_at`, `updated_by`). Facts about that store, verified
@@ -250,7 +250,7 @@ asking the DM, checkout 400s, and `/paywall` says the app is free.
 
 `PaywallGate` sends an admin to `/setup` once per session while the question is
 unanswered (`sessionStorage` key `paywall_setup_ok_at`). The screen (`components/setup/setup-screen.tsx`) pre-selects the current answer
-and shows the price only for a paid choice. When the tenant has no Stripe key,
+and shows the price only for a paid choice. When the platform has no Stripe key,
 or the admin chooses Replace under the Save button (where the on-file key shows
 as first 3 + last 2 characters, all the DM reveals), a second screen asks for
 the restricted key before saving. It posts `{access, amount}` with an
@@ -282,7 +282,7 @@ echo `TOKEN` or `IBLAI_API_KEY`; fill secrets with an editor, not a shell.
 | Command                       | Expect                                                                                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm check`                  | `oxlint --type-aware` then `oxlint --type-check`, exit 0. The warnings are inherited from the starter and shadcn; add none in files you touch. |
-| `pnpm test`                   | vitest, all green: config, source paths, tenant, paywall helpers, tenant-metadata store, route handlers, chat-row labels                       |
+| `pnpm test`                   | vitest, all green: config, source paths, platform resolution, paywall helpers, platform-metadata store, route handlers, chat-row labels        |
 | `pnpm fmt:check`              | oxfmt clean. Run `pnpm fmt` on the files you changed, only those.                                                                              |
 | `pnpm build`                  | Turbopack production build; TypeScript 7's `tsc` runs the type check                                                                           |
 | `cargo check` in `src-tauri/` | two template dead-code warnings, no errors                                                                                                     |
@@ -310,7 +310,7 @@ with the flag off.
   be shadowed there.
 - The SDK's `OnboardingShell` is a `min-h-dvh` canvas: use it only on pages outside
   `(app)` (no navbar), as `/setup` does; inside the layout use `StepHeader` alone.
-- The SDK's tenant-metadata hooks take array-of-object args
+- The SDK's platform-metadata hooks take array-of-object args
   (`useGetTenantMetadataQuery([{ org }])`); the server side just fetches the URL.
 - The installed `@iblai/iblai-api` predates the platform's Stripe proxy: there are
   no SDK hooks for it, only the fetches in `lib/paywall.ts`.
@@ -340,7 +340,7 @@ with the flag off.
 
 ### Conventions
 
-- Never `git commit` (rei commits) and never `--no-verify`.
+- Never `git commit` (the developer commits) and never `--no-verify`.
 - UI recedes: match the starter's quiet language, no new accent colours, no dialog
   where a row will do, nothing new in the navbar, nothing of ours in the sidebar
   footer (the SDK owns that cluster). Loud failure over silent fallback: an

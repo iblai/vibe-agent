@@ -8,7 +8,7 @@ import {
   userFromRequest,
 } from "../../../../lib/paywall";
 
-/** What this app sells (env override, else the tenant's choice) — any member may read. */
+/** What this app sells (env override, else the platform's choice) — any member may read. */
 export async function GET(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: "Not a platform member" }, { status: 401 });
