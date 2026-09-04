@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1](https://github.com/iblai/vibe-agent/compare/v1.0.0...v1.0.1) (2026-09-04)
+
+### CI
+
+* release with the built-in GITHUB_TOKEN instead of a personal access token ([bc89c51](https://github.com/iblai/vibe-agent/commit/bc89c515d36c3ff275ece90e8a8e705caaf1bf07))
+
 ## 1.0.0 (2026-09-04)
 
 ### Features
