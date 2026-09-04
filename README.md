@@ -64,6 +64,8 @@ The paywall boundary is the route group: everything under `app/(app)/(paid)/` re
 
 ### Install & Run
 
+With a coding agent (Claude Code, opencode…), say `clone https://github.com/iblai/vibe-agent and start the server`: it asks whether you are a platform admin ([ibl.ai/join](https://ibl.ai/join) makes you one), then for the platform key and the agent uuid, writes `iblai.env` and `.env.local`, and starts the dev server (the procedure is in `AGENTS.md`). By hand:
+
 1. Platform credentials go in `iblai.env` (gitignored):
 
    ```bash

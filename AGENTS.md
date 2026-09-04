@@ -12,6 +12,58 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 This project is built on the ibl.ai platform using the `@iblai/iblai-js` SDK.
 
+## Run the server
+
+When someone asks to run, start, launch, boot or serve this app — "run the
+server", "start it", "get it running locally", or "clone
+https://github.com/iblai/vibe-agent and start the server" — do the steps
+below in this order, and ask before touching anything. If the repo is not
+cloned yet, `git clone https://github.com/iblai/vibe-agent` first and work
+inside it; this section is the procedure.
+
+1. **Ask whether they are a platform admin on ibl.ai.** The app fronts one
+   ibl.ai platform, and its admin is the one who configures it (the agent,
+   the paywall). If they are not, or are not sure: signing up at
+   https://ibl.ai/join creates an account and a platform with them as its
+   admin — whoever created a platform is its admin. Wait for that before
+   asking anything else. Their platforms are listed on
+   https://login.iblai.app/me.
+2. **Ask for the platform key and the agent uuid, in one message.** The
+   platform key is the platform's name as listed on
+   https://login.iblai.app/me. The agent uuid is the last path segment of
+   the agent's URL on os.ibl.ai,
+   `https://os.ibl.ai/platform/<platform-key>/<agent-uuid>`; pasting that
+   URL answers both. Never invent either: the app refuses placeholders
+   (`main`, `your-platform`…) on purpose. Never ask for the Platform API
+   Token or any other secret. This is the one place this repo asks for the
+   platform key directly; the vibe skills route it through `iblai.env`
+   instead.
+3. **Check the key before writing anything.**
+   `curl -fsS https://api.iblai.app/dm/api/core/orgs/<platform-key>/metadata/`
+   is a public read: 200 means the platform exists, 404 ("Platform not
+   found") means a typo or a platform they do not have — ask again.
+4. **Write the env files from their templates**, changing nothing else in
+   them: `cp iblai.env.example iblai.env` and set `PLATFORM=<platform-key>`
+   (leave `TOKEN` as it is); `cp .env.example .env.local` and set
+   `NEXT_PUBLIC_MAIN_TENANT_KEY=<platform-key>`,
+   `NEXT_PUBLIC_DEFAULT_AGENT_ID=<agent-uuid>` and `IBLAI_API_KEY=` (empty,
+   not the `your-token` placeholder). `PAYWALL_APP_SLUG` stays `vibe-agent`.
+   Both files are gitignored; never print them back.
+5. **Install and start.** Node 20 or newer (22 recommended) and pnpm 11
+   (`corepack enable`, or `npm i -g pnpm`); then `pnpm install --ignore-scripts`,
+   `pnpm husky` (the commit hook), and, with port 3000 free
+   (`ss -ltnp 'sport = :3000'`), `pnpm dev` in the background. Wait for
+   "Ready", then tell them the URL, http://localhost:3000, and that they sign
+   in there with their ibl.ai account; as the platform admin they land on
+   the one setup question first (free access needs no Stripe key). Do not
+   open a browser for them.
+6. **Say once what is left.** Members' access checks and checkout need the
+   Platform API Token in `.env.local` as `IBLAI_API_KEY`, pasted by them
+   with an editor (minted by `/iblai-api-login` from the `iblai/api` skills,
+   or an org secret) — never through the chat. And http://localhost:3000
+   must be among the platform's allowed redirect origins, or sign-in never
+   comes back.
+
 ## Component Priority
 
 When adding UI features, follow this priority order:
