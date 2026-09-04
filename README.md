@@ -187,6 +187,14 @@ Signed desktop releases: copy `desktop-signing.env.example` to `desktop-signing.
 
 Stores: `/iblai-vibe-ops-release` generates a Makefile and Fastlane config (`make ios-release`, `make android-release`); `/iblai-vibe-windows-msix` packages an MSIX for the Microsoft Store. A binary locked to one platform: `IBL_TENANT=<key> pnpm exec tauri build`.
 
+## Releases
+
+Releases are automated with [release-it](https://github.com/release-it/release-it), the way the OS does it. Every push to `main` runs `.github/workflows/release.yml`: it reads the conventional commit subjects since the last tag, bumps the version in `package.json` (`feat:` minor, `fix:` patch, a `!` or a `BREAKING CHANGE` footer major, anything else patch), prepends the entries to `CHANGELOG.md`, commits `chore(release): vX.Y.Z`, tags `vX.Y.Z` and publishes a GitHub Release with the same notes. The release commit is skipped by the workflow, so there is no loop. Only typed subjects reach the changelog, which is what the commitlint hook in `.husky/commit-msg` enforces. The first release, made while no `v*` tag exists, is 1.0.0.
+
+The workflow needs one repository secret, `GIT_TOKEN`: a personal access token with `repo` scope, as in `iblai/os` and `iblai/hq`. A push made with the built-in `GITHUB_TOKEN` cannot trigger other workflows or pass branch protection; without the secret the job fails at checkout.
+
+Never edit `CHANGELOG.md` or the `package.json` version by hand. `pnpm release` is for CI; locally use `pnpm release --dry-run --git.pushRepo=<remote>` to preview (release-it expects `origin`). The desktop shell is versioned on its own: `src-tauri/tauri.conf.json` is set by hand and built on demand, see above.
+
 ## Testing
 
 | Command                                | Does                                                                                                                          |
@@ -235,6 +243,8 @@ providers/iblai-providers.tsx           # initializeDataLayer + AuthProvider + T
 store/iblai-store.ts                    # Redux store (slice keys fixed by the SDK)
 proxy.ts                                # CSP and the 404 for /about when the flag is off
 src-tauri/                              # Thin WebView shell for desktop and mobile
+.github/workflows/                      # release.yml (release-it on every push to main), tauri-build-desktop.yml (desktop bundles on demand)
+.husky/commit-msg                       # commitlint
 ```
 
 ## Built With
@@ -252,14 +262,15 @@ src-tauri/                              # Thin WebView shell for desktop and mob
 
 1. Clone the repo
 2. Install dependencies: `pnpm install --ignore-scripts`
-3. Fill `iblai.env` and `.env.local` (see Quick Start), then `pnpm dev`
+3. `pnpm husky` once: the install skips `prepare`, so the commit-msg hook (commitlint) is not there otherwise
+4. Fill `iblai.env` and `.env.local` (see Quick Start), then `pnpm dev`
 
 ### Development Workflow
 
 1. Create a branch from `main`: `git checkout -b feat/my-feature`
 2. Make your changes; `pnpm fmt` the files you touched
 3. Run `pnpm check`, `pnpm test` and `pnpm build`
-4. Commit and push your branch
+4. Commit with a conventional subject (`feat:`, `fix:`, `docs:`, `chore:`… — commitlint checks it; it decides the next version and the changelog) and push your branch
 5. Open a pull request against `main`
 
 ### Guidelines

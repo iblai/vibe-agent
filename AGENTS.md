@@ -169,6 +169,7 @@ of users:
 | `components/loading-screen.tsx`                                                                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                   |
 | `lib/iblai/`                                                                                            | `config.ts` (env accessors; `apiKey()` is server-only), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                               |
 | `providers/iblai-providers.tsx`, `store/iblai-store.ts`                                                 | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                               |
+| `.github/workflows/`                                                                                    | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                          |
 | `proxy.ts`                                                                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                       |
 
 ### Invariants, and why
@@ -286,6 +287,7 @@ echo `TOKEN` or `IBLAI_API_KEY`; fill secrets with an editor, not a shell.
 | `pnpm fmt:check`              | oxfmt clean. Run `pnpm fmt` on the files you changed, only those.                                                                              |
 | `pnpm build`                  | Turbopack production build; TypeScript 7's `tsc` runs the type check                                                                           |
 | `cargo check` in `src-tauri/` | two template dead-code warnings, no errors                                                                                                     |
+| `pnpm release`                | CI only: `release.yml` runs it on every push to `main`. Locally only `--dry-run --git.pushRepo=<remote>` (clones here have no `origin`).       |
 
 Manual smoke with placeholder credentials: `/` and `/setup` render their
 alerts; every `/api/paywall/*` route answers 401 without a token; `/about` 404s
@@ -337,10 +339,18 @@ with the flag off.
   block wheel chaining to `main` (reproduced in headless Chromium: the wheel
   did nothing over the whole surface). The analytics wrapper resets both to
   `overscroll-auto` through descendant arbitrary variants.
+- `pnpm install --ignore-scripts` skips `prepare`, so the husky hook is dead
+  until a one-time `pnpm husky` (`git config core.hooksPath` then says
+  `.husky/_`). CI sets `HUSKY=0` for release-it's own commit. `CHANGELOG.md`
+  is oxfmt-ignored: it is generated in conventional-changelog's Markdown.
 
 ### Conventions
 
-- Never `git commit --no-verify`.
+- Never `git commit --no-verify`: the commit-msg hook is commitlint, and the
+  subject decides the next version and the changelog (`feat:` minor, `fix:`
+  patch, `!` major; an untyped subject ships as a patch but never reaches the
+  changelog). `chore(release):` belongs to release-it; `CHANGELOG.md` and the
+  `package.json` version are written by release-it only, never by hand.
 - UI recedes: match the starter's quiet language, no new accent colours, no dialog
   where a row will do, nothing new in the navbar, nothing of ours in the sidebar
   footer (the SDK owns that cluster). Loud failure over silent fallback: an

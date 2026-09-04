@@ -1,0 +1,62 @@
+name: Release
+
+# Every push to main releases the web app with release-it: the version bump and
+# the CHANGELOG.md entries come from the conventional commit subjects since the
+# last tag; then the release commit, the v<version> tag and the GitHub Release
+# are pushed. The first release, made while no v* tag exists, is 1.0.0.
+#
+# GIT_TOKEN is a personal access token with repo scope, as in iblai/os and
+# iblai/hq: a push made with GITHUB_TOKEN cannot trigger other workflows or pass
+# branch protection. Without the secret the checkout step fails.
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent releases
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Skip our own release commits (loop)
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GIT_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run release-it
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          HUSKY: "0"
+        run: |
+          set -euo pipefail
+          if [ -n "$(git ls-remote --tags origin 'refs/tags/v*')" ]; then
+            pnpm release --ci
+          else
+            # First release: 1.0.0, not the bump release-it computes from history.
+            pnpm release 1.0.0 --ci
+          fi
