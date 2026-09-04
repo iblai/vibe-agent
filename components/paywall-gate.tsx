@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { isTenantAdmin } from "@/lib/iblai/tenant";
 import { checkPaywallSetup, setupSettled } from "@/lib/paywall-client";
+import { LoadingScreen } from "@/components/loading-screen";
 
 const OK_KEY = "paywall_ok_at";
 const OK_TTL_MS = 60_000;
@@ -50,11 +51,6 @@ export function PaywallGate({ children }: { children: ReactNode }) {
       .catch(() => router.replace("/paywall"));
   }, [ok, router]);
 
-  if (!ok)
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-gray-400">Loading...</p>
-      </div>
-    );
+  if (!ok) return <LoadingScreen />;
   return <>{children}</>;
 }

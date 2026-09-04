@@ -19,9 +19,11 @@ import { adminCaller, failure, isResponse, jsonBody } from "../../../../../lib/p
 /**
  * The whole paywall setup in one call: free, one-time or monthly (USD).
  * Every platform call carries the admin's OWN token, so the DM decides who may
- * do this (403 otherwise). Order: retire the previous price → make sure there
- * is a product tagged for this app → create the price → record the choice in
- * the tenant metadata. A client Idempotency-Key makes a retried submit safe.
+ * do this (403 otherwise). Paid order: retire the previous price → make sure
+ * there is a product tagged for this app → create the price → record the
+ * choice in the tenant metadata. Free makes ZERO Stripe calls, ever — it only
+ * records the choice — because free must never need a Stripe key. A client
+ * Idempotency-Key makes a retried submit safe.
  */
 export async function POST(req: NextRequest) {
   const caller = await adminCaller(req);
@@ -51,15 +53,17 @@ export async function POST(req: NextRequest) {
     let productId = current?.stripe.product_id ?? null;
     let priceId: string | null = null;
 
-    // 1. The previous price stops being sellable, whatever comes next.
-    if (current?.stripe.price_id)
-      await stripe(`/prices/${encodeURIComponent(current.stripe.price_id)}/`, {
-        method: "POST",
-        headers: idem("archive"),
-        body: JSON.stringify({ active: false }),
-      });
-
     if (paid) {
+      // 1. The previous price stops being sellable. Paid only: archiving needs
+      //    the tenant's Stripe key, which free must never require. A price left
+      //    behind by a paid → free switch stays active on Stripe but is never
+      //    sold — the app sells only the recorded price_id (null for free).
+      if (current?.stripe.price_id)
+        await stripe(`/prices/${encodeURIComponent(current.stripe.price_id)}/`, {
+          method: "POST",
+          headers: idem("archive"),
+          body: JSON.stringify({ active: false }),
+        });
       // 2. The product: reuse ours while it is still active and tagged, else create.
       if (productId) {
         let product: any = null;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Account } from "@iblai/iblai-js/web-containers/next";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
+import { LoadingScreen } from "@/components/loading-screen";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -43,18 +44,16 @@ export default function AccountPage() {
   }, []);
 
   if (!ready || !tenantKey) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-400">Loading account settings...</p>
-      </div>
-    );
+    return <LoadingScreen className="min-h-0 flex-1" />;
   }
 
   return (
-    <div className="mx-auto w-full px-4 py-8 md:w-[75vw] md:px-0">
+    // A bounded, full-width white surface: the SDK panel is transparent and
+    // needs a definite height for its rail and scrolling content pane.
+    <div className="flex min-h-0 flex-1 flex-col bg-white">
       {isAdmin && (
         // The way back to the paywall question, deliberately quiet.
-        <div className="mb-2 flex justify-end">
+        <div className="flex shrink-0 justify-end px-4 pt-3">
           <Link
             href="/setup"
             className="text-xs text-muted-foreground underline-offset-4 hover:underline"
@@ -63,7 +62,7 @@ export default function AccountPage() {
           </Link>
         </div>
       )}
-      <div className="rounded-lg border border-[var(--border-color)] bg-white overflow-hidden">
+      <div className="min-h-0 flex-1">
         <Account
           tenant={tenantKey}
           tenants={tenants}

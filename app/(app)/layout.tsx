@@ -1,18 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { NavBar, type NavLink } from "@/components/navbar/nav-bar";
-import { NavigationDrawer, type NavItem } from "@/components/navbar/navigation-drawer";
+import { SidebarInset, SidebarProvider } from "@iblai/iblai-js/web-containers/next";
+import { NavBar } from "@/components/navbar/nav-bar";
+import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 import { handleLogout } from "@/lib/iblai/auth-utils";
 import { AdminModeProvider } from "@/lib/iblai/admin-mode";
-
-const NAV_LINKS: NavLink[] = [
-  { name: "Home", href: "/", segment: null },
-  { name: "Analytics", href: "/analytics", segment: "analytics" },
-  { name: "About", href: "/about", segment: "about" },
-];
 
 type Session = {
   tenantKey: string;
@@ -52,54 +47,65 @@ function readSession(): Session {
   return session;
 }
 
+// The SDK sidebar remembers its desktop state in this cookie (7 days).
+// Expanded until the user collapses it.
+function readSidebarOpen(): boolean {
+  if (typeof document === "undefined") return true;
+  const match = /(?:^|;\s*)sidebar_state=(true|false)/.exec(document.cookie);
+  return match ? match[1] === "true" : true;
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [session] = useState(readSession);
+  const [sidebarOpen] = useState(readSidebarOpen);
   // Platform admins start in Admin mode and can switch to the user's view.
   const [adminMode, setAdminMode] = useState(true);
   const { tenantKey, username, email, isAdmin, tenants, currentTenant } = session;
 
-  // Analytics is the creator's dashboard; non-admins never see the link.
-  // About is off unless NEXT_PUBLIC_SHOW_ABOUT=true.
-  const links = NAV_LINKS.filter(
-    (l) =>
-      (l.href !== "/analytics" || (isAdmin && adminMode)) &&
-      (l.href !== "/about" || config.showAbout()),
-  );
-  const drawerItems: NavItem[] = links.map(({ name, href }) => ({ name, href }));
-
   return (
     <AdminModeProvider isAdmin={isAdmin} mode={adminMode} setMode={setAdminMode}>
+      {/* The LMS shell: one SDK SidebarProvider, the sidebar and the inset as
+          flex siblings, the navbar inside the inset, and one scroller. */}
       <div className="flex h-screen flex-col overflow-hidden bg-white">
-        <NavBar
-          onMenuClick={() => setDrawerOpen((prev) => !prev)}
-          links={links}
-          tenantKey={tenantKey}
-          username={username}
-          email={email}
-          mainPlatformKey={config.mainTenantKey()}
-          isAdmin={isAdmin}
-          currentTenant={currentTenant}
-          userTenants={tenants}
-          authURL={config.authUrl()}
-          onLogout={() => handleLogout()}
-          onTenantChange={(key: string) => {
-            localStorage.setItem("current_tenant", key);
-            localStorage.setItem("tenant", key);
-            window.location.reload();
-          }}
-          showCreditBalance={false}
-        />
+        <SidebarProvider defaultOpen={sidebarOpen} className="min-h-0 flex-1">
+          <AppSidebar
+            tenantKey={tenantKey}
+            username={username ?? ""}
+            email={email}
+            isAdmin={isAdmin}
+            currentTenant={currentTenant}
+          />
+          <SidebarInset
+            asChild
+            className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white"
+          >
+            <div>
+              <NavBar
+                tenantKey={tenantKey}
+                username={username}
+                email={email}
+                mainPlatformKey={config.mainTenantKey()}
+                isAdmin={isAdmin}
+                currentTenant={currentTenant}
+                userTenants={tenants}
+                authURL={config.authUrl()}
+                onLogout={() => handleLogout()}
+                onTenantChange={(key: string) => {
+                  localStorage.setItem("current_tenant", key);
+                  localStorage.setItem("tenant", key);
+                  window.location.reload();
+                }}
+                showCreditBalance={false}
+              />
 
-        <NavigationDrawer
-          isOpen={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          items={drawerItems}
-        />
-
-        {/* The one scroller: pages size to their content and never scroll a
-            column of their own; white, the same as the content cards. */}
-        <main className="flex flex-1 flex-col overflow-y-auto bg-white">{children}</main>
+              {/* The one scroller: pages size to their content and never scroll a
+                  column of their own; white, the same as the content cards. */}
+              <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white">
+                {children}
+              </main>
+            </div>
+          </SidebarInset>
+        </SidebarProvider>
       </div>
     </AdminModeProvider>
   );

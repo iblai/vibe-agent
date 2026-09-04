@@ -356,17 +356,16 @@ describe("POST /api/paywall/admin/setup", () => {
     expect(metaWrites).toHaveLength(0);
   });
 
-  it("free: retires the previous price and records the choice with the admin's token", async () => {
+  it("free: records the choice without any Stripe call, even after a paid plan", async () => {
     stubFetch({
       apps: { "demo-app": monthly() },
-      dm: stripeDm({ "POST /prices/price_1/": () => ({ id: "price_1", active: false }) }),
+      // Any proxy call throws: free must never need the tenant's Stripe key.
+      dm: stripeDm({}),
     });
     const { POST } = await loadSetup();
     const res = await POST(post({ access: "free" }, { "Idempotency-Key": "k" }));
     expect(res.status).toBe(200);
-    expect(sentBody(0)).toEqual({ active: false });
-    expect(sentHeaders(0).Authorization).toBe("Token dm-abc");
-    expect(sentHeaders(0)["Idempotency-Key"]).toBe("k-archive");
+    expect(dmCalls).toHaveLength(0);
     expect(metaWrites).toHaveLength(1);
     expect(metaWrites[0].headers.Authorization).toBe("Token dm-abc");
     expect(metaWrites[0].body).toEqual({
@@ -377,6 +376,7 @@ describe("POST /api/paywall/admin/setup", () => {
             access: "free",
             amount: null,
             currency: null,
+            // The tagged product is kept for a later paid answer.
             stripe: { product_id: "prod_1", price_id: null },
             updated_at: expect.any(String),
             updated_by: "jane",

@@ -8,22 +8,33 @@ the chat is sold on the tenant's own Stripe account. Built from
 
 ## What is where
 
-| Route                  | What                                                                                                                                             | Who                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `/`                    | Chat with the agent (SDK `Chat`)                                                                                                                 | paying users, tenant admins    |
-| `/analytics`           | Usage overview for this one agent (SDK `AnalyticsOverview`)                                                                                      | tenant admins, in Admin mode   |
-| `/setup`               | One question — free access, one-time fee or monthly fee (USD); the Stripe product and price are created for you. Opens itself until answered     | tenant admins                  |
-| `/about`               | Off by default; `NEXT_PUBLIC_SHOW_ABOUT=true` enables it. The agent's public profile plus your copy (`ABOUT_COPY` in `app/(app)/about/page.tsx`) | any signed-in user             |
-| `/profile`, `/account` | SDK `Profile` / `Account`, reached from the profile dropdown                                                                                     | any signed-in user / admins    |
-| `/notifications`       | SDK notification centre, reached from the bell                                                                                                   | any signed-in user             |
-| `/paywall`             | Pricing page, Stripe Checkout, restore access                                                                                                    | signed-in users without access |
+| Route                  | What                                                                                                                                                             | Who                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `/`                    | Chat with the agent (SDK `Chat`)                                                                                                                                 | paying users, tenant admins    |
+| `/analytics/*`         | The OS analytics section for this one agent: Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports (SDK `AnalyticsLayout` + stats components) | tenant admins, in Admin mode   |
+| `/setup`               | One question — free access, one-time fee or monthly fee (USD); the Stripe product and price are created for you. Opens itself until answered                     | tenant admins                  |
+| `/about`               | Off by default; `NEXT_PUBLIC_SHOW_ABOUT=true` enables it. The agent's public profile plus your copy (`ABOUT_COPY` in `app/(app)/about/page.tsx`)                 | any signed-in user             |
+| `/profile`, `/account` | SDK `Profile` / `Account`, reached from the profile dropdown                                                                                                     | any signed-in user / admins    |
+| `/notifications`       | SDK notification centre, reached from the bell                                                                                                                   | any signed-in user             |
+| `/paywall`             | Pricing page, Stripe Checkout, restore access                                                                                                                    | signed-in users without access |
+
+The left sidebar is the SDK's `PlatformSidebar` — the shell the ibl.ai OS and
+LMS use — with this app's content: **New chat**, **Recents** (pinned chats
+first; each row can be pinned, unpinned or deleted) and, for tenant admins in
+Admin mode, the **Analytics** menu. The bottom-left cluster is the SDK's:
+Notifications and Support for everyone, plus Invites, Management,
+Integrations, Monetization (when the tenant sells credits) and Advanced for
+admins in Admin mode; the last four open the platform's account sheet in
+place. The sidebar collapses to an icon rail (Cmd/Ctrl+B) and becomes a drawer
+on phones.
 
 Tenant admins get a User / Admin switch in the navbar (in the profile menu on
 narrow screens). User mode shows the app as a user sees it; Analytics exists
 only in Admin mode. The switch starts on Admin and resets on reload.
 
-The navbar logo is the org logo set in the tenant's platform org settings,
-falling back to the ibl.ai mark when the platform has none.
+The logo in the sidebar header (and in the navbar on phones) is the org logo
+set in the tenant's platform org settings, falling back to the ibl.ai mark when
+the platform has none.
 
 The paywall boundary is the route group: everything under `app/(app)/(paid)/`
 renders inside `PaywallGate`. `/paywall` must stay outside that group or the
@@ -87,11 +98,13 @@ app (and reachable later from the quiet "Payments setup" link on `/account`):
   on Subscriptions). It is saved as the tenant's `stripe` integration credential
   on the platform, browser to platform; this app's server never sees it.
 
-Save creates the Stripe product (named after the platform, tagged
-`metadata.app = PAYWALL_APP_SLUG`, which is what the platform checks at
+For a paid answer, Save creates the Stripe product (named after the platform,
+tagged `metadata.app = PAYWALL_APP_SLUG`, which is what the platform checks at
 checkout) and the price, retires the previous price if the answer changed, and
 records the choice in the tenant's platform metadata under
-`apps.<PAYWALL_APP_SLUG>`:
+`apps.<PAYWALL_APP_SLUG>`. Free records the choice and touches Stripe not at
+all — no key needed, ever; a price left behind by a paid → free switch stays
+active on Stripe but is never sold, since the app sells only the recorded one:
 
 ```json
 {

@@ -154,20 +154,22 @@ of users:
 
 ### Map
 
-| Where                                                                                                   | What                                                                                                                                                          |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/(app)/`                                                                                            | Signed-in shell: navbar, drawer, `AdminModeProvider`. `/about`, `/profile`, `/account`, `/notifications` live here.                                           |
-| `app/(app)/(paid)/`                                                                                     | Behind `PaywallGate`: `/` (SDK `Chat`) and `/analytics` (SDK `AnalyticsOverview`, Admin mode only).                                                           |
-| `app/paywall/`                                                                                          | Pricing page, Stripe Checkout hand-off, return page. Outside `(app)` on purpose: inside it the gate would loop.                                               |
-| `app/setup/`                                                                                            | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.         |
-| `app/sso-login-complete/`                                                                               | SSO landing, outside the auth gate.                                                                                                                           |
-| `app/api/paywall/{access,checkout,prices}/`                                                             | Buyer rail: the server calls the platform with `IBLAI_API_KEY`, as the buyer.                                                                                 |
-| `app/api/paywall/admin/setup/`                                                                          | Admin rail: one route that retires the old price, ensures the tagged product, creates the price and records the choice — forwarding the admin's own DM token. |
-| `lib/paywall.ts`, `lib/paywall-admin.ts`                                                                | Server-only paywall code, including the tenant-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                          |
-| `lib/paywall-client.ts`, `components/paywall-gate.tsx`, `components/setup/`, `components/plan-card.tsx` | Browser side: the token header, the gate, the setup screen, the plan card.                                                                                    |
-| `lib/iblai/`                                                                                            | `config.ts` (env accessors; `apiKey()` is server-only), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                       |
-| `providers/iblai-providers.tsx`, `store/iblai-store.ts`                                                 | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                       |
-| `proxy.ts`                                                                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                               |
+| Where                                                                                                   | What                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/(app)/`                                                                                            | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels) live here.                                                                                                                                  |
+| `app/(app)/(paid)/`                                                                                     | Behind `PaywallGate`: `/` (SDK `Chat`) and `/analytics/*` — the SDK `AnalyticsLayout` tab strip over eight pages (Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports), Admin mode only.                                                                                                         |
+| `app/paywall/`                                                                                          | Pricing page, Stripe Checkout hand-off, return page. Outside `(app)` on purpose: inside it the gate would loop.                                                                                                                                                                                                       |
+| `app/setup/`                                                                                            | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                 |
+| `app/sso-login-complete/`                                                                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                   |
+| `app/api/paywall/{access,checkout,prices}/`                                                             | Buyer rail: the server calls the platform with `IBLAI_API_KEY`, as the buyer.                                                                                                                                                                                                                                         |
+| `app/api/paywall/admin/setup/`                                                                          | Admin rail: one route that, for a paid answer, retires the old price, ensures the tagged product and creates the price, then records the choice — forwarding the admin's own DM token. Free records the choice only: zero Stripe calls, so it never needs a key.                                                      |
+| `lib/paywall.ts`, `lib/paywall-admin.ts`                                                                | Server-only paywall code, including the tenant-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                  |
+| `lib/paywall-client.ts`, `components/paywall-gate.tsx`, `components/setup/`, `components/plan-card.tsx` | Browser side: the token header, the gate, the setup screen, the plan card.                                                                                                                                                                                                                                            |
+| `components/sidebar/`, `lib/chat-rows.ts`                                                               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows. |
+| `components/loading-screen.tsx`                                                                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                   |
+| `lib/iblai/`                                                                                            | `config.ts` (env accessors; `apiKey()` is server-only), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                               |
+| `providers/iblai-providers.tsx`, `store/iblai-store.ts`                                                 | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                               |
+| `proxy.ts`                                                                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                       |
 
 ### Invariants, and why
 
@@ -189,20 +191,40 @@ of users:
   entitlement authority for everyone else.
 - Nothing in the navbar for the setup: the way back is the quiet "Payments
   setup" link on `/account` (rei's call).
-- Pages never scroll a column of their own: `main` in `app/(app)/layout.tsx` is
-  the scroller and paints white, the same as the content cards, so page wrappers
-  carry no `overflow` or `flex-1`.
+- One sidebar context: the shell is the SDK's `SidebarProvider` →
+  `PlatformSidebar` + `SidebarInset` from `@iblai/iblai-js/web-containers/next`
+  (the LMS's structure). Never add a local shadcn sidebar copy — it is a
+  different React context and the SDK README forbids mixing them — and never
+  render the navbar outside the provider: its hamburger calls `useSidebar()`.
+- The sidebar changes chats only through the chat page's URL contract:
+  `/?session=<id>` restores a chat, `/?new=<nonce>` starts one (both remount
+  `<Chat>` through its `key`). It never dispatches into the chat slice.
+- Analytics (the sidebar menu and the pages) and the footer admin cluster key
+  on `isLiveAdmin` = tenant admin AND Admin mode. RBAC is off
+  (`enableRbac: false`), so the SDK's own footer visibility rules reduce to that
+  flag: members get Notifications and Support, live admins the full cluster.
+- Scrolling, three kinds of page. Ordinary pages (About) never scroll a
+  column of their own: `main` in `app/(app)/layout.tsx` is the scroller and
+  paints white, and their card is `md:w-3/4` of the inset, never `75vw` (a
+  viewport fraction overflows once the sidebar shares the row). The SDK's
+  self-scrolling panels — Notifications, Profile, Account — get a bounded,
+  full-width `flex-1 min-h-0` wrapper and own their scrolling, as in the OS:
+  their `h-full` needs a definite height, and a card around them leaves the
+  panes inert, scrolls the rail away and unpins Profile's Save bar.
+  Notifications paints its own grey; Profile and Account are transparent and
+  sit on white. Analytics is the full-bleed `#f5f7fb` surface that `main`
+  scrolls (rei's call).
 
 ### Paywall and setup, end to end
 
 Two auth rails, one boundary (`lib/paywall.ts`):
 
-| Call                                               | Who calls the platform         | Credential                             | Path user                             |
-| -------------------------------------------------- | ------------------------------ | -------------------------------------- | ------------------------------------- |
-| access check, checkout, plan display               | this server                    | `Api-Token IBLAI_API_KEY`              | the buyer, verified by `token/verify` |
-| read the tenant's choice                           | this server                    | none: tenant metadata is a public read | none                                  |
-| retire/create product and price, record the choice | this server, from `/setup`     | the admin's own DM `Token`, forwarded  | the admin                             |
-| save the Stripe key                                | the browser, through SDK hooks | the admin's own DM `Token`             | none                                  |
+| Call                                                           | Who calls the platform         | Credential                             | Path user                             |
+| -------------------------------------------------------------- | ------------------------------ | -------------------------------------- | ------------------------------------- |
+| access check, checkout, plan display                           | this server                    | `Api-Token IBLAI_API_KEY`              | the buyer, verified by `token/verify` |
+| read the tenant's choice                                       | this server                    | none: tenant metadata is a public read | none                                  |
+| retire/create product and price (paid only), record the choice | this server, from `/setup`     | the admin's own DM `Token`, forwarded  | the admin                             |
+| save the Stripe key                                            | the browser, through SDK hooks | the admin's own DM `Token`             | none                                  |
 
 The platform's Stripe proxy (`…/providers/stripe/payments/*`) is admin-only for
 every verb and answers 403 otherwise, and so is the tenant-metadata write; so the
@@ -260,7 +282,7 @@ echo `TOKEN` or `IBLAI_API_KEY`; fill secrets with an editor, not a shell.
 | Command                       | Expect                                                                                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm check`                  | `oxlint --type-aware` then `oxlint --type-check`, exit 0. The warnings are inherited from the starter and shadcn; add none in files you touch. |
-| `pnpm test`                   | vitest, all green: config, source paths, tenant, paywall helpers, tenant-metadata store, route handlers                                        |
+| `pnpm test`                   | vitest, all green: config, source paths, tenant, paywall helpers, tenant-metadata store, route handlers, chat-row labels                       |
 | `pnpm fmt:check`              | oxfmt clean. Run `pnpm fmt` on the files you changed, only those.                                                                              |
 | `pnpm build`                  | Turbopack production build; TypeScript 7's `tsc` runs the type check                                                                           |
 | `cargo check` in `src-tauri/` | two template dead-code warnings, no errors                                                                                                     |
@@ -294,13 +316,39 @@ with the flag off.
   no SDK hooks for it, only the fetches in `lib/paywall.ts`.
 - ibl.ai hosting is Vercel functions: the filesystem is read-only, so nothing may
   be persisted on disk at runtime (the earlier SQLite catalogue was dropped for this).
+- `pnpm-workspace.yaml` used to pin `@iblai/web-containers` at 1.16.0 (a 1.16.1
+  publish imported data-layer exports that did not exist yet). data-layer 1.13.0
+  has them, so the override is gone and `@iblai/iblai-js` ^2.8.5 brings
+  web-containers 1.19.8 — the first with `AnalyticsMemoryStats`. Before the next
+  bump, diff the SDK source's `@iblai/data-layer` / `@iblai/web-utils` imports
+  against the installed d.ts; `pnpm build` is the drift check.
+- Lucide 1.x renamed icons (`LineChart` → `ChartLine`, `MoreVertical` →
+  `EllipsisVertical`, `Loader2` → `LoaderCircle`). The SDK types sidebar icons
+  structurally (`PlatformSidebarNavIcon`), so the app's Lucide passes straight in.
+- The pinned-messages query type omits `userId` although the URL needs it: pass
+  the args as a variable, not an object literal, so the field survives the
+  excess-property check. The API answers `{ results }` where the SDK types an array.
+- Recents refetches when a new chat's first exchange lands (two messages, the
+  second the assistant's, nothing streaming) — the OS's rule; without it a new
+  chat shows up only after a reload.
+- The SDK `AnalyticsLayout` ships `overscroll-none` (root) and
+  `overscroll-contain` (content area) for hosts where it is the scroller. Under
+  our scrolling `main` its boxes have nothing to scroll, yet those rules still
+  block wheel chaining to `main` (reproduced in headless Chromium: the wheel
+  did nothing over the whole surface). The analytics wrapper resets both to
+  `overscroll-auto` through descendant arbitrary variants.
 
 ### Conventions
 
 - Never `git commit` (rei commits) and never `--no-verify`.
 - UI recedes: match the starter's quiet language, no new accent colours, no dialog
-  where a row will do, nothing new in the navbar. Loud failure over silent
-  fallback: an unconfigured route 500s naming the missing key.
+  where a row will do, nothing new in the navbar, nothing of ours in the sidebar
+  footer (the SDK owns that cluster). Loud failure over silent fallback: an
+  unconfigured route 500s naming the missing key.
 - A new env key lands in `.env.example` and the README in the same change; a new
   route lands with a test in `__tests__/` using the fetch-stub pattern there.
+- A busy moment the user must not interrupt (saving, redirecting, checking a
+  payment) renders `LoadingScreen overlay` with a short message, and the form's
+  controls stay disabled underneath; plain loading states render `LoadingScreen`
+  too. No bespoke spinners or grey "Loading..." text.
 - Read DM source only at `~/Git/ibl.ai/dm/v2`.

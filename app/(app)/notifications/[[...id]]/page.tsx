@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { NotificationDisplay } from "@iblai/iblai-js/web-containers";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
+import { LoadingScreen } from "@/components/loading-screen";
 
 export default function NotificationsPage() {
   const params = useParams();
@@ -40,23 +41,20 @@ export default function NotificationsPage() {
   }, []);
 
   if (!ready || !tenantKey) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-400">Loading notifications...</p>
-      </div>
-    );
+    return <LoadingScreen className="min-h-0 flex-1" />;
   }
 
   return (
-    <div className="mx-auto w-full px-4 py-8 md:w-[75vw] md:px-0">
-      <div className="rounded-lg border border-[var(--border-color)] bg-white overflow-hidden">
-        <NotificationDisplay
-          org={tenantKey}
-          userId={username}
-          isAdmin={isAdmin}
-          selectedNotificationId={notificationId}
-        />
-      </div>
+    // A bounded, full-width surface: the SDK panel needs a definite height to
+    // scroll its list and detail panes itself (the OS hosts it the same way).
+    <div className="flex min-h-0 flex-1 flex-col">
+      <NotificationDisplay
+        className="h-full"
+        org={tenantKey}
+        userId={username}
+        isAdmin={isAdmin}
+        selectedNotificationId={notificationId}
+      />
     </div>
   );
 }

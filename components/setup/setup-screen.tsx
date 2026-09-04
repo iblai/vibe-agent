@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CardInfoIcon,
   OnboardingShell,
   StepHeader,
   onboardingPrimaryButtonClass,
@@ -13,6 +14,7 @@ import {
   useGetMaskedIntegrationCredentialsQuery,
   useUpdateIntegrationCredentialMutation,
 } from "@iblai/iblai-js/data-layer";
+import { LoadingScreen } from "@/components/loading-screen";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -174,6 +176,9 @@ export function SetupScreen() {
 
   return (
     <OnboardingShell totalSteps={totalSteps} currentStep={currentStep}>
+      {/* Saving = creating the product and price, or storing the key and then
+          saving: the page is busy and nothing here should be touched. */}
+      {busy && <LoadingScreen overlay message="Saving…" />}
       {screen === "question" ? (
         <form onSubmit={onQuestionSubmit}>
           <StepHeader
@@ -271,23 +276,26 @@ export function SetupScreen() {
       ) : (
         <form onSubmit={onKeySubmit}>
           <StepHeader
-            title="Connect Stripe"
+            title="Monetize Your Agent"
             subtitle="A restricted key from your Stripe account. It is stored on the platform, never in this app."
           />
           <div className="space-y-2">
-            <Label htmlFor="stripe-key">Stripe restricted key</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="stripe-key">Stripe Restricted Key</Label>
+              {/* The how-to lives on the label: hover, focus, or screen reader. */}
+              <CardInfoIcon
+                className="-my-1"
+                description="Visit stripe.com to get your key and securely monetize your application."
+              />
+            </div>
             <Input
               id="stripe-key"
               type="password"
               autoComplete="off"
-              placeholder="rk_live_… or rk_test_…"
+              placeholder="rk_…"
               value={key}
               onChange={(e) => setKey(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Stripe → Developers → API keys → Create restricted key: write access on Products,
-              Prices, Checkout Sessions and Customers; read access on Subscriptions.
-            </p>
           </div>
           {error && (
             <p role="alert" className="mt-4 text-sm text-destructive">

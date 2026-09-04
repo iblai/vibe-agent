@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { checkPaywallAccess } from "@/components/paywall-gate";
+import { LoadingScreen } from "@/components/loading-screen";
 
 function ReturnInner() {
   const router = useRouter();
@@ -26,7 +27,7 @@ function ReturnInner() {
           </Link>
         </div>
       ) : (
-        <p className="text-sm text-gray-400">Confirming your payment...</p>
+        <LoadingScreen message="Confirming your payment…" className="min-h-0" />
       )}
     </main>
   );

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { checkPaywallAccess } from "@/components/paywall-gate";
+import { LoadingScreen } from "@/components/loading-screen";
 
 /** Entitled users landing here go straight back into the app. */
 export function PaywallAutoVerify() {
@@ -37,6 +38,7 @@ export function BuyButton({ priceId }: { priceId: string }) {
 
   return (
     <div className="space-y-2">
+      {busy && <LoadingScreen overlay message="Redirecting to payment…" />}
       <button
         onClick={buy}
         disabled={busy}
@@ -52,17 +54,30 @@ export function BuyButton({ priceId }: { priceId: string }) {
 export function RestoreAccessButton() {
   const router = useRouter();
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const restore = async () => {
     setMessage("");
-    const granted = await checkPaywallAccess();
-    if (granted) router.replace("/");
-    else setMessage("No payment found for your account.");
+    setBusy(true);
+    try {
+      const granted = await checkPaywallAccess();
+      if (granted) router.replace("/");
+      else setMessage("No payment found for your account.");
+    } catch {
+      setMessage("Could not check your payment. Try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="space-y-1">
-      <button onClick={restore} className="text-sm text-primary underline-offset-4 hover:underline">
+      {busy && <LoadingScreen overlay message="Checking your payment…" />}
+      <button
+        onClick={() => void restore()}
+        disabled={busy}
+        className="text-sm text-primary underline-offset-4 hover:underline disabled:opacity-50"
+      >
         Already paid? Restore access
       </button>
       {message && <p className="text-xs text-muted-foreground">{message}</p>}

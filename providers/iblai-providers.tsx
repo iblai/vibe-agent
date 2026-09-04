@@ -24,6 +24,7 @@ import { AuthProvider, TenantProvider, ServiceWorkerProvider } from "@iblai/ibla
 import { Toaster } from "sonner";
 import { WebContainersI18nProvider } from "@iblai/iblai-js/web-containers/next";
 import { RadixPointerEventsGuard } from "@/components/radix-pointer-events-guard";
+import { LoadingScreen } from "@/components/loading-screen";
 
 import { iblaiStore } from "@/store/iblai-store";
 import { LocalStorageService } from "@/lib/iblai/storage-service";
@@ -104,11 +105,7 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
 
   const isSsoRoute = pathname?.startsWith("/sso-login") ?? false;
 
-  const LOADING = (
-    <div className="flex min-h-screen items-center justify-center">
-      <p className="text-sm text-gray-400">Loading...</p>
-    </div>
-  );
+  const LOADING = <LoadingScreen />;
 
   if (!isInitialized || !mounted) return LOADING;
 

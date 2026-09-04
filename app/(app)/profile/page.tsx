@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Profile } from "@iblai/iblai-js/web-containers";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
+import { LoadingScreen } from "@/components/loading-screen";
 
 export default function ProfilePage() {
   const [tenantKey, setTenantKey] = useState("");
@@ -37,29 +38,26 @@ export default function ProfilePage() {
   }, []);
 
   if (!ready || !tenantKey) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-400">Loading profile...</p>
-      </div>
-    );
+    return <LoadingScreen className="min-h-0 flex-1" />;
   }
 
   return (
-    <div className="mx-auto w-full px-4 py-8 md:w-[75vw] md:px-0">
-      <div className="rounded-lg border border-[var(--border-color)] bg-white overflow-hidden">
-        <Profile
-          tenant={tenantKey}
-          tenants={tenants}
-          username={username}
-          isAdmin={isAdmin}
-          onClose={() => {}}
-          customization={{
-            showPlatformName: true,
-            useGravatarPicFallback: true,
-          }}
-          targetTab="basic"
-        />
-      </div>
+    // A bounded, full-width white surface: the SDK panel is transparent and
+    // needs a definite height for its rail, scrolling content pane and pinned
+    // Save bar (the OS shows it in a p-0 bg-white dialog of fixed height).
+    <div className="min-h-0 flex-1 bg-white">
+      <Profile
+        tenant={tenantKey}
+        tenants={tenants}
+        username={username}
+        isAdmin={isAdmin}
+        onClose={() => {}}
+        customization={{
+          showPlatformName: true,
+          useGravatarPicFallback: true,
+        }}
+        targetTab="basic"
+      />
     </div>
   );
 }

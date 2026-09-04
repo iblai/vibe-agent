@@ -5,6 +5,7 @@ import Link from "next/link";
 import config from "@/lib/iblai/config";
 import { fetchCatalogue, type CatalogueView } from "@/lib/paywall-client";
 import { PlanCard } from "@/components/plan-card";
+import { LoadingScreen } from "@/components/loading-screen";
 import { BuyButton, PaywallAutoVerify, RestoreAccessButton } from "./paywall-actions";
 
 // The plans come from /api/paywall/prices: PAYWALL_PRICE_IDS if set, else the
@@ -31,7 +32,7 @@ export default function PaywallPage() {
             {error}
           </p>
         ) : catalogue === null ? (
-          <p className="text-sm text-gray-400">Loading plans...</p>
+          <LoadingScreen className="min-h-0 py-6" />
         ) : !catalogue.paywall ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">This app is free to use right now.</p>

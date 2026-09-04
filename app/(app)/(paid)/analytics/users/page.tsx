@@ -1,13 +1,13 @@
 "use client";
 
-import { AnalyticsOverview } from "@iblai/iblai-js/web-containers";
+import { AnalyticsUsersStats } from "@iblai/iblai-js/web-containers";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 
-export default function AnalyticsPage() {
+export default function AnalyticsUsersPage() {
   const mentorId = config.defaultAgentId();
   return (
-    <AnalyticsOverview
+    <AnalyticsUsersStats
       tenantKey={resolveAppTenant()}
       mentorId={mentorId}
       selectedMentorId={mentorId}

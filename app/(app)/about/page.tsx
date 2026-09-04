@@ -26,7 +26,7 @@ export default function AboutPage() {
   }
 
   return (
-    <div className="mx-auto w-full px-4 py-8 md:w-[75vw] md:px-0">
+    <div className="mx-auto w-full px-4 py-8 md:w-3/4 md:px-0">
       <div className="space-y-4 rounded-lg border border-[var(--border-color)] bg-white p-8">
         {data?.profile_image && (
           <Image
