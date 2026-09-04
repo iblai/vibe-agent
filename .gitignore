@@ -30,8 +30,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — only the *.example templates are committed. Real env files
+# (.env.local with your tenant key + secrets, iblai.env with your platform
+# token) must never be committed.
 .env*
+!.env.example
+!.env.*.example
+iblai.env*
+!iblai.env.example
+!iblai.env.*.example
 
 # vercel
 .vercel
@@ -39,3 +46,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agents
+.agents/skills
+.claude/skills
+
+# tauri
+/src-tauri/target/
+/src-tauri/gen/
+desktop-signing.env
+
+# playwright
+/playwright/.auth/
