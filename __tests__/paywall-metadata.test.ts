@@ -135,10 +135,11 @@ describe("resolveCatalogue / allowedPriceIds", () => {
       vi.fn<typeof fetch>(async () => metadataResponse({})),
     );
     const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-    expect(await resolveCatalogue("jane")).toEqual({
+    expect(await resolveCatalogue()).toEqual({
       paywall: false,
       decided: false,
       source: "none",
+      platformName: "Acme",
       prices: [],
       settings: null,
     });
@@ -160,7 +161,7 @@ describe("resolveCatalogue / allowedPriceIds", () => {
       ),
     );
     const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-    expect(await resolveCatalogue("jane")).toMatchObject({
+    expect(await resolveCatalogue()).toMatchObject({
       paywall: false,
       decided: true,
       source: "metadata",
@@ -174,10 +175,11 @@ describe("resolveCatalogue / allowedPriceIds", () => {
     const fetchMock = vi.fn<typeof fetch>(async () => metadataResponse({ "demo-app": info() }));
     vi.stubGlobal("fetch", fetchMock);
     const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-    expect(await resolveCatalogue("jane")).toEqual({
+    expect(await resolveCatalogue()).toEqual({
       paywall: true,
       decided: true,
       source: "metadata",
+      platformName: "Acme",
       prices: [
         {
           id: "price_1",
@@ -200,6 +202,9 @@ describe("resolveCatalogue / allowedPriceIds", () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const url = input as string;
       if (url === META_URL) return metadataResponse({ "demo-app": info({ access: "free" }) });
+      // The org-wide key names its owner, the member whose path the lookup runs on.
+      if (url.endsWith("/api/core/token/verify/"))
+        return Response.json({ user_id: 1, username: "owner", email: "owner@x.io" });
       return Response.json({
         id: "price_env",
         nickname: "",
@@ -213,8 +218,8 @@ describe("resolveCatalogue / allowedPriceIds", () => {
     const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
 
     expect(await allowedPriceIds()).toEqual(["price_env"]);
-    const first = await resolveCatalogue("jane");
-    const second = await resolveCatalogue("jane");
+    const first = await resolveCatalogue();
+    const second = await resolveCatalogue();
     expect(first).toMatchObject({
       paywall: true,
       decided: true,
@@ -224,13 +229,15 @@ describe("resolveCatalogue / allowedPriceIds", () => {
       ],
     });
     expect(second).toEqual(first);
-    const stripeCalls = fetchMock.mock.calls.filter(([url]) => url !== META_URL);
+    const stripeCalls = fetchMock.mock.calls.filter(
+      ([url]) => url !== META_URL && !String(url).endsWith("/api/core/token/verify/"),
+    );
     expect(stripeCalls).toHaveLength(1);
     expect(stripeCalls[0][0]).toBe(
       "https://api.example.edu/dm/api/ai-mentor/orgs/testorg" +
-        "/users/jane/providers/stripe/payments/prices/price_env/?expand[]=product",
+        "/users/owner/providers/stripe/payments/prices/price_env/?expand[]=product",
     );
-    // Display lookups are the buyer-side rail: the org-wide key, never a user token.
+    // Display lookups run as the platform: the org-wide key, never a user token.
     expect(
       ((stripeCalls[0][1] as RequestInit).headers as Record<string, string>).Authorization,
     ).toBe("Api-Token platform-key");
@@ -242,7 +249,7 @@ describe("resolveCatalogue / allowedPriceIds", () => {
       vi.fn<typeof fetch>(async () => Response.json({ detail: "Not found." }, { status: 404 })),
     );
     const { resolveCatalogue, allowedPriceIds, PaywallUpstreamError } = await loadPaywall();
-    await expect(resolveCatalogue("jane")).rejects.toBeInstanceOf(PaywallUpstreamError);
+    await expect(resolveCatalogue()).rejects.toBeInstanceOf(PaywallUpstreamError);
     await expect(allowedPriceIds()).rejects.toMatchObject({ status: 404 });
   });
 });

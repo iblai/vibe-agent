@@ -22,7 +22,7 @@ A single-platform app on ibl.ai: users sign in with ibl.ai SSO and chat with one
 
 <!-- Once deployed: "vibe-agent is deployed at [<host>](https://<host>)." -->
 
-vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) bypass the paywall, see Analytics in Admin mode and answer the one setup question; **members** pay on `/paywall` only when the admin chose a fee, and chat on `/`. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
+vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode and answer the one setup question; **members** chat on `/`. Membership is the entitlement: when the admin chose a fee, a signed-in user who is not a member yet pays on `/paywall` and becomes one, and a visitor without an account creates one at [ibl.ai/join](https://ibl.ai/join) first. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
 
 ## Screenshots
 
@@ -38,7 +38,7 @@ vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A crea
 | **Chat**              | `/` — the SDK `Chat` with the one agent (`NEXT_PUBLIC_DEFAULT_AGENT_ID`): streaming, sessions, files, voice. Paying users and platform admins.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **Sidebar**           | The SDK `PlatformSidebar` — the shell the ibl.ai OS and LMS use — with this app's content: **New chat**, **Recents** (pinned chats first; each row can be pinned, unpinned or deleted) and, for admins in Admin mode, the **Analytics** menu. The bottom-left cluster is the SDK's: Notifications and Support for everyone, plus Invites, Management, Integrations, Monetization (when the platform sells credits) and Advanced for admins in Admin mode; the last four open the platform's account sheet in place. Collapses to an icon rail (Cmd/Ctrl+B), a drawer on phones. |
 | **Analytics**         | `/analytics/*` — the OS analytics section for this one agent: Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports (SDK `AnalyticsLayout` + stats components). Platform admins, in Admin mode.                                                                                                                                                                                                                                                                                                                                                              |
-| **Paywall**           | `/paywall` — pricing page, Stripe Checkout on the platform's own Stripe account, restore access. The platform owns entitlement; free access never needs a Stripe key.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Paywall**           | `/paywall` — the public join page: Stripe Checkout on the platform's own Stripe account, and paying makes the buyer a member. The platform owns payments; free access never needs a Stripe key.                                                                                                                                                                                                                                                                                                                                                                                 |
 | **Setup**             | `/setup` — one question: free access, one-time fee or monthly fee (USD); the Stripe product and price are created for you. Opens itself for a platform admin until answered; reachable later from the quiet "Payments setup" link on `/account`.                                                                                                                                                                                                                                                                                                                                |
 | **User / Admin mode** | Platform admins get a User / Admin switch in the navbar (in the profile menu on narrow screens). User mode shows the app as a member sees it; Analytics and the admin cluster exist only in Admin mode. Starts on Admin, resets on reload.                                                                                                                                                                                                                                                                                                                                      |
 | **Profile**           | `/profile` — the SDK `Profile` panel, from the profile dropdown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -48,7 +48,7 @@ vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A crea
 | **Branding**          | The logo in the sidebar header (and in the navbar on phones) is the org logo set in the platform's org settings, falling back to the ibl.ai mark.                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **SSO**               | Login via iblai.app — no tokens to manage. Every origin the app runs on must be in the platform's allowed redirect origins.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-The paywall boundary is the route group: everything under `app/(app)/(paid)/` renders inside `PaywallGate`. `/paywall` must stay outside that group or the gate loops. Platform admins bypass the gate.
+Membership is the entitlement: a signed-in member never sees a payment page. `/paywall` is the public join page for everyone else, outside `app/(app)/` on purpose.
 
 ## AGENTS.md / CLAUDE.md
 
@@ -80,7 +80,7 @@ With a coding agent (Claude Code, opencode…), say `clone https://github.com/ib
    cp .env.example .env.local
    ```
 
-   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`), `IBLAI_API_KEY` (= `TOKEN`) and `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the agent uuid). The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. The platform comes from that env var only: a missing or placeholder key shows an alert instead of an app, and a platform left in localStorage by another vibe app on the same origin is ignored.
+   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`), `IBLAI_API_KEY` (= `TOKEN`), `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the agent uuid) and `NEXT_PUBLIC_APP_NAME` (what the join page and the tab call the app); `IBLAI_APP_BASE_URL` can stay empty (the app uses the origin it is reached on for its sign-up and Stripe return URLs). The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. The platform comes from that env var only: a missing or placeholder key shows an alert instead of an app, and so does an `IBLAI_API_KEY` that is missing, a placeholder, rejected by the platform or another platform's (the app checks it against the platform before rendering anything). A platform left in localStorage by another vibe app on the same origin is ignored.
 
 3. Install and run:
 
@@ -100,14 +100,21 @@ pnpm start
 
 ## Paywall
 
-The platform (DM) owns entitlement: it mints Stripe Checkout sessions on the platform's own Stripe key, records payments, and checks subscriptions live. No Stripe Connect, no commission, no webhooks. The app has the server routes under `app/api/paywall/`, one client gate (`components/paywall-gate.tsx`), the pricing page (`app/paywall/`) and the setup screen (`app/setup`, `components/setup/setup-screen.tsx`). The buyer-side routes are the `/iblai-vibe-monetization-app-paywall` skill from `iblai/vibe`; the setup screen and the setup route are this app's.
+Paying the creator makes the buyer a member of the platform, and that membership is the entitlement: a signed-in member never sees a payment page. The platform (DM) owns every payment: it mints Stripe Checkout sessions on the platform's own Stripe key, records payments, and checks subscriptions live. No Stripe Connect, no commission, no webhooks, and no Stripe key in this app. The app has the server routes under `app/api/paywall/`, the join page (`app/paywall/`, public, headed "Join <`NEXT_PUBLIC_APP_NAME`>") and the setup screen (`app/setup`, `components/setup/setup-screen.tsx`).
+
+Who gets in:
+
+- **Platform admins and invited members** are members already: straight into the app.
+- **A visitor without an account** presses Create Account on the join page: the platform's own $0 sign-up (a Stripe page asking for an email, which also gives them a platform of their own) brings them back to the join page signed in.
+- **A signed-in user who is not a member** lands on `/paywall` when joining costs money: one plan, one button, the email locked to their account. Back from Stripe, the server verifies the session on the platform's account and links them with the platform's admin link API. On a free platform there is no page: setup opens self-join and the SDK joins them at sign-in.
+- **A payer whose subscription lapsed** is caught on their next visit: the platform's ledger says they paid, the live check says it no longer grants, the membership ends and they see `/paywall` again.
 
 Setup is one question, asked of a platform admin the first time they open the app (and reachable later from the quiet "Payments setup" link on `/account`):
 
-- **Free access** — anyone signed in can use the agent. No Stripe needed, ever.
+- **Free access** — anyone who signs in joins. No Stripe needed, ever.
 - **One-time fee** or **Monthly fee** — enter the price (USD). The first time, a second screen ("Monetize Your Agent") asks for a **restricted** Stripe key (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions). It is saved as the platform's `stripe` integration credential on the platform, browser to platform; this app's server never sees it.
 
-For a paid answer, Save creates the Stripe product (named after the platform, tagged `metadata.app = PAYWALL_APP_SLUG`, which is what the platform checks at checkout) and the price, retires the previous price if the answer changed, and records the choice in the platform's metadata under `apps.<PAYWALL_APP_SLUG>`. Free records the choice and touches Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
+For a paid answer, Save creates the Stripe product (named after the platform, tagged `metadata.app = PAYWALL_APP_SLUG`) and the price, retires the previous price if the answer changed, closes self-join (payment is the only way in), and records the choice in the platform's metadata under `apps.<PAYWALL_APP_SLUG>`. Free opens self-join and records the choice, touching Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
 
 ```json
 {
@@ -123,7 +130,7 @@ For a paid answer, Save creates the Stripe product (named after the platform, ta
 }
 ```
 
-That metadata is a **public read** on the platform (ids and amounts only, never a key), so the deployed app needs no extra credential to know what it sells. Runtime rule (`lib/paywall.ts`): `PAYWALL_PRICE_IDS`, if set, is what the app sells; otherwise the recorded choice; free or unanswered means everyone gets in. Test with card `4242 4242 4242 4242`. Cancellations bite within the DM cache (about 75 s) plus up to 60 s of client grant cache.
+That metadata is a **public read** on the platform (ids and amounts only, never a key), so the deployed app needs no extra credential to know what it sells. Runtime rule (`lib/paywall.ts`): `PAYWALL_PRICE_IDS`, if set, is what the app sells; otherwise the recorded choice; free or unanswered means everyone who signs in gets in. Test with card `4242 4242 4242 4242`. A cancellation takes effect on the payer's next visit, after the platform's cache (about 75 s) and the app's 60 s session cache.
 
 Headless alternative, with `DOMAIN`, `PLATFORM`, `TOKEN` and `IBLAI_USERNAME` from `iblai.env`:
 
@@ -144,11 +151,11 @@ curl -s -H "$AUTH" -H 'Content-Type: application/json' -X POST "$PAY/prices/" \
 curl -s -H "$AUTH" "$PAY/paywall/payments/?app=vibe-agent"   # who paid so far
 ```
 
-Then `PAYWALL_PRICE_IDS=price_xxx,price_yyy` in `.env.local`: the pricing page describes env-listed prices from Stripe itself.
+Then `PAYWALL_PRICE_IDS=price_xxx,price_yyy` in `.env.local`: the join page describes env-listed prices from Stripe itself.
 
 ## Deployment
 
-`/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`; confirm it carries `IBLAI_API_KEY` and `PAYWALL_APP_SLUG` (plus `PAYWALL_PRICE_IDS` if you use the override), or the paywall routes 500 in production. Server mode is required: never set `output: 'export'`. Afterwards:
+`/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`; confirm it carries `IBLAI_API_KEY` and `PAYWALL_APP_SLUG` (plus `PAYWALL_PRICE_IDS` if you use the override), or the paywall routes 500 in production. `IBLAI_APP_BASE_URL` is not needed there: the deployed app uses its own origin, and the allowlist drops the key anyway. Server mode is required: never set `output: 'export'`. Afterwards:
 
 - add the deployed origin to the platform's allowed redirect origins;
 - put it in `src-tauri/tauri.conf.json` → `build.frontendDist` (see below).
@@ -219,11 +226,11 @@ app/
 ├── layout.tsx                          # Root layout — wraps everything in <IblaiProviders>
 ├── (app)/
 │   ├── layout.tsx                      # Signed-in shell: SDK SidebarProvider + PlatformSidebar + navbar, one scroller
-│   ├── (paid)/                         # Behind <PaywallGate>
+│   ├── (paid)/                         # Chat and analytics; being signed in here means being a member
 │   │   ├── page.tsx                    # Chat — SDK <Chat> (?session= restores, ?new= starts fresh)
 │   │   └── analytics/                  # SDK <AnalyticsLayout> over eight pages
 │   ├── about/  profile/  account/  notifications/[[...id]]/
-├── paywall/                            # Pricing page, checkout hand-off, return page (outside the gate)
+├── paywall/                            # The join page (public), checkout hand-off, return page
 ├── setup/                              # The one setup question (outside the shell, no navbar)
 ├── sso-login-complete/                 # SSO landing
 └── api/paywall/
@@ -233,12 +240,11 @@ components/
 ├── sidebar/                            # app-sidebar.tsx (PlatformSidebar wrapper), recent-chats.tsx, chat-row.tsx, flat-nav-row.tsx
 ├── navbar/                             # nav-bar.tsx, logo.tsx, user-profile-button.tsx, admin-mode-switch.tsx
 ├── setup/setup-screen.tsx              # The question, then the Stripe key screen
-├── paywall-gate.tsx                    # Client gate for (paid)
 ├── loading-screen.tsx                  # The one loading / busy screen (OS look)
 └── plan-card.tsx
 lib/
-├── paywall.ts  paywall-admin.ts        # Server-only: platform calls, platform-metadata store, catalogue
-├── paywall-client.ts                   # Browser side: token header, catalogue fetch, setup checks
+├── paywall.ts  paywall-admin.ts        # Server-only: checkout, join, standing, platform-metadata store, catalogue
+├── paywall-client.ts                   # Browser side: token header, catalogue, setup and standing checks
 ├── chat-rows.ts                        # Recents row labels
 └── iblai/                              # config.ts (env), tenant.ts, admin-mode.tsx, auth-utils.ts, storage-service.ts
 providers/iblai-providers.tsx           # initializeDataLayer + AuthProvider + TenantProvider + i18n

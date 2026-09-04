@@ -86,3 +86,27 @@ describe("isTenantAdmin", () => {
     expect(isTenantAdmin()).toBe(true);
   });
 });
+
+describe("membership helpers", () => {
+  it("readTenants tolerates junk, isTenantMember matches by key, dropTenant forgets one", async () => {
+    process.env[ENV_KEY] = "acme";
+    const { readTenants, isTenantMember, dropTenant } = await loadTenant();
+    localStorage.setItem("tenants", "not json");
+    expect(readTenants()).toEqual([]);
+    localStorage.setItem(
+      "tenants",
+      JSON.stringify([{ key: "main" }, { key: "acme", is_admin: true }]),
+    );
+    expect(isTenantMember(readTenants(), "acme")).toBe(true);
+    expect(isTenantMember(readTenants(), "other")).toBe(false);
+    dropTenant("acme");
+    expect(readTenants()).toEqual([{ key: "main" }]);
+  });
+
+  it("paywallEntry sends only a non-member of a paid platform to the join page", async () => {
+    const { paywallEntry } = await loadTenant();
+    expect(paywallEntry({ member: false, paid: true })).toBe("/paywall");
+    expect(paywallEntry({ member: true, paid: true })).toBeNull();
+    expect(paywallEntry({ member: false, paid: false })).toBeNull();
+  });
+});

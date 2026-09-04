@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@iblai/iblai-js/web-containers/next";
 import { NavBar } from "@/components/navbar/nav-bar";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import config from "@/lib/iblai/config";
-import { resolveAppTenant } from "@/lib/iblai/tenant";
+import { dropTenant, resolveAppTenant } from "@/lib/iblai/tenant";
 import { handleLogout } from "@/lib/iblai/auth-utils";
 import { AdminModeProvider } from "@/lib/iblai/admin-mode";
+import {
+  checkMemberAccess,
+  checkPaywallSetup,
+  memberAccessSettled,
+  setupSettled,
+} from "@/lib/paywall-client";
 
 type Session = {
   tenantKey: string;
@@ -61,6 +68,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Platform admins start in Admin mode and can switch to the user's view.
   const [adminMode, setAdminMode] = useState(true);
   const { tenantKey, username, email, isAdmin, tenants, currentTenant } = session;
+  const router = useRouter();
+
+  // Two quiet checks on arrival, each remembered for the session. An admin who
+  // has not answered the setup question yet is taken to it; a member whose paid
+  // access lapsed loses the membership and lands on the join page. Invited
+  // members and admins never see a payment page.
+  useEffect(() => {
+    if (isAdmin) {
+      if (!setupSettled())
+        void checkPaywallSetup().then((state) => {
+          if (state === "undecided") router.replace("/setup");
+        });
+      return;
+    }
+    if (memberAccessSettled()) return;
+    void checkMemberAccess().then((ok) => {
+      if (ok) return;
+      dropTenant(tenantKey);
+      window.location.assign("/paywall");
+    });
+  }, [isAdmin, tenantKey, router]);
 
   return (
     <AdminModeProvider isAdmin={isAdmin} mode={adminMode} setMode={setAdminMode}>

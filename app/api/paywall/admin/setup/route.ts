@@ -14,7 +14,13 @@ import {
   type AppPaymentInfo,
   type DmInit,
 } from "../../../../../lib/paywall";
-import { adminCaller, failure, isResponse, jsonBody } from "../../../../../lib/paywall-admin";
+import {
+  adminCaller,
+  failure,
+  isResponse,
+  jsonBody,
+  setSelfJoin,
+} from "../../../../../lib/paywall-admin";
 
 /**
  * The whole paywall setup in one call: free, one-time or monthly (USD).
@@ -22,8 +28,10 @@ import { adminCaller, failure, isResponse, jsonBody } from "../../../../../lib/p
  * do this (403 otherwise). Paid order: retire the previous price → make sure
  * there is a product tagged for this app → create the price → record the
  * choice in the platform metadata. Free makes ZERO Stripe calls, ever — it only
- * records the choice — because free must never need a Stripe key. A client
- * Idempotency-Key makes a retried submit safe.
+ * records the choice — because free must never need a Stripe key. Either way
+ * the platform's self-join switch follows the answer: open when free, closed
+ * when paid (payment is the way in). A client Idempotency-Key makes a retried
+ * submit safe.
  */
 export async function POST(req: NextRequest) {
   const caller = await adminCaller(req);
@@ -101,7 +109,10 @@ export async function POST(req: NextRequest) {
       priceId = String(price.id);
     }
 
-    // 4. Record the choice (nulls included: the DM merges and cannot delete keys).
+    // 4. Who may join by signing in: everyone when free, nobody when paid.
+    await setSelfJoin(caller.token, !paid);
+
+    // 5. Record the choice (nulls included: the DM merges and cannot delete keys).
     const info: AppPaymentInfo = {
       version: 1,
       access: access as Access,

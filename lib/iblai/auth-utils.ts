@@ -33,6 +33,13 @@ function getRedirectOrigin(): string {
   return origin;
 }
 
+/** The Auth SPA's login URL that comes back to {origin}/sso-login-complete, scoped to {tenant} when given. */
+export const authLoginUrl = (origin: string, tenant: string) =>
+  `${config.authUrl()}/login?app=custom&redirect-to=${origin}${tenant ? `&tenant=${encodeURIComponent(tenant)}` : ""}`;
+
+/** Where SsoLogin sends the browser once the Auth SPA returns (the key it reads, then clears). */
+export const saveReturnPath = (path: string) => localStorage.setItem("redirectTo", path);
+
 /** Redirect the browser to the ibl.ai Auth SPA for login. */
 export async function redirectToAuthSpa(
   redirectTo?: string,
@@ -43,13 +50,9 @@ export async function redirectToAuthSpa(
   const redirectOrigin = getRedirectOrigin();
   const path = redirectTo ?? (typeof window !== "undefined" ? window.location.pathname : "/");
 
-  if (saveRedirect) {
-    localStorage.setItem("redirectTo", path);
-  }
+  if (saveRedirect) saveReturnPath(path);
 
-  const tenant = platformKey || resolveAppTenant();
-  let authUrl = `${config.authUrl()}/login?app=custom&redirect-to=${redirectOrigin}`;
-  if (tenant) authUrl += `&tenant=${encodeURIComponent(tenant)}`;
+  let authUrl = authLoginUrl(redirectOrigin, platformKey || resolveAppTenant());
   if (logout) authUrl += "&logout=1";
 
   // All platforms (web, desktop Tauri, mobile Tauri): navigate the window
@@ -57,6 +60,15 @@ export async function redirectToAuthSpa(
   // the Rust on_navigation filter opens OAuth providers (Google, Apple)
   // in a popup window automatically.
   window.location.href = authUrl;
+}
+
+/** A DM token the paywall routes will accept: present and not past its expiry. */
+export function hasLiveDmToken(): boolean {
+  if (typeof window === "undefined") return false;
+  const token = localStorage.getItem("dm_token");
+  if (!token) return false;
+  const expiry = localStorage.getItem("dm_token_expires");
+  return !expiry || new Date(expiry) > new Date();
 }
 
 /** Check whether a non-expired auth token exists in localStorage. */

@@ -1,7 +1,8 @@
 // lib/paywall-admin.ts — shared plumbing for the admin setup route
 // (app/api/paywall/admin/setup). Server-only. Relative imports for vitest.
 import { NextResponse } from "next/server";
-import { PAYWALL_APP_SLUG, PaywallUpstreamError, callerFromRequest } from "./paywall";
+import config from "./iblai/config";
+import { PAYWALL_APP_SLUG, PaywallUpstreamError, callerFromRequest, dmJson } from "./paywall";
 
 export type AdminCaller = { token: string; username: string };
 
@@ -24,6 +25,22 @@ export const isResponse = (x: unknown): x is NextResponse => x instanceof NextRe
 export function failure(e: unknown): NextResponse {
   if (e instanceof PaywallUpstreamError) return NextResponse.json(e.body, { status: e.status });
   throw e;
+}
+
+/**
+ * Who may join by signing in: everyone while the app is free, nobody once it
+ * is paid — payment is then the only way in. The admin's own token; the DM
+ * decides who may flip it.
+ */
+export async function setSelfJoin(token: string, allow: boolean): Promise<void> {
+  await dmJson(
+    await fetch(`${config.dmUrl()}/api/core/users/platforms/config/`, {
+      method: "POST",
+      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ platform_key: config.mainTenantKey(), allow_self_linking: allow }),
+      cache: "no-store",
+    }),
+  );
 }
 
 /** Parse a JSON body; garbage is an empty object, so field checks 400 instead of crashing. */

@@ -48,6 +48,47 @@ export function checkTenantMismatch(): boolean {
   return false;
 }
 
+export type TenantEntry = { key: string; is_admin?: boolean };
+
+/** The platforms the sign-in handed the browser (`tenants`), or [] when signed out. */
+export function readTenants(): TenantEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem("tenants") ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Is {key} among the user's platforms? */
+export const isTenantMember = (tenants: TenantEntry[], key: string) =>
+  tenants.some((t) => t?.key === key);
+
+/**
+ * The platform ended this user's membership (a lapsed payment): forget it
+ * locally too, so the join page offers the plan instead of "you're a member".
+ */
+export function dropTenant(key: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("tenants", JSON.stringify(readTenants().filter((t) => t?.key !== key)));
+}
+
+/**
+ * Where a user the pinned platform does not know is sent: the join page when
+ * joining costs money, otherwise the login SPA (null), where a free platform
+ * signs them up and the SDK joins them silently.
+ */
+export function paywallEntry({
+  member,
+  paid,
+}: {
+  member: boolean;
+  paid: boolean;
+}): "/paywall" | null {
+  return paid && !member ? "/paywall" : null;
+}
+
 /**
  * Whether the signed-in user is an admin of the app's platform, from the
  * `tenants` list SsoLogin / TenantProvider persist. Not the SDK's
@@ -55,14 +96,5 @@ export function checkTenantMismatch(): boolean {
  * as a plain key string.
  */
 export function isTenantAdmin(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const tenants = JSON.parse(localStorage.getItem("tenants") ?? "[]") as {
-      key: string;
-      is_admin?: boolean;
-    }[];
-    return !!tenants.find((t) => t.key === resolveAppTenant())?.is_admin;
-  } catch {
-    return false;
-  }
+  return !!readTenants().find((t) => t.key === resolveAppTenant())?.is_admin;
 }

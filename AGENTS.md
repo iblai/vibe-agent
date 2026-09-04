@@ -47,9 +47,18 @@ inside it; this section is the procedure.
    (leave `TOKEN` as it is); `cp .env.example .env.local` and set
    `NEXT_PUBLIC_MAIN_TENANT_KEY=<platform-key>`,
    `NEXT_PUBLIC_DEFAULT_AGENT_ID=<agent-uuid>` and `IBLAI_API_KEY=` (empty,
-   not the `your-token` placeholder). `PAYWALL_APP_SLUG` stays `vibe-agent`.
-   Both files are gitignored; never print them back.
-5. **Install and start.** Node 20 or newer (22 recommended) and pnpm 11
+   not the `your-token` placeholder); `NEXT_PUBLIC_APP_NAME=<what they call
+the app>` if they said, else leave it empty (the join page then says
+   "Join this app"). `IBLAI_APP_BASE_URL` stays empty (the app uses the
+   origin it is reached on) and `PAYWALL_APP_SLUG` stays `vibe-agent`. Both
+   files are gitignored; never print them back.
+5. **Ask them to paste the Platform API Token** into `.env.local` as
+   `IBLAI_API_KEY`, with an editor, never through the chat (it is minted by
+   `/iblai-api-login` from the `iblai/api` skills, or is an org secret). The
+   app checks the key against the platform and renders nothing but an alert
+   until a valid one for this platform is there. Wait for them to say it is
+   done.
+6. **Install and start.** Node 20 or newer (22 recommended) and pnpm 11
    (`corepack enable`, or `npm i -g pnpm`); then `pnpm install --ignore-scripts`,
    `pnpm husky` (the commit hook), and, with port 3000 free
    (`ss -ltnp 'sport = :3000'`), `pnpm dev` in the background. Wait for
@@ -57,12 +66,8 @@ inside it; this section is the procedure.
    in there with their ibl.ai account; as the platform admin they land on
    the one setup question first (free access needs no Stripe key). Do not
    open a browser for them.
-6. **Say once what is left.** Members' access checks and checkout need the
-   Platform API Token in `.env.local` as `IBLAI_API_KEY`, pasted by them
-   with an editor (minted by `/iblai-api-login` from the `iblai/api` skills,
-   or an org secret) — never through the chat. And http://localhost:3000
-   must be among the platform's allowed redirect origins, or sign-in never
-   comes back.
+7. **Say once what is left.** http://localhost:3000 must be among the
+   platform's allowed redirect origins, or sign-in never comes back.
 
 ## Component Priority
 
@@ -197,32 +202,34 @@ platform) fronts a single agent with a chat app; if they choose to charge,
 members of the platform pay through the creator's own Stripe account. Two kinds
 of users:
 
-- **Platform admins** (the creator and their staff) bypass the paywall, see
+- **Platform admins** (the creator and their staff) are members already, see
   Analytics in Admin mode, and answer the one setup question at `/setup`. Admin
   means `isTenantAdmin()` in `lib/iblai/tenant.ts` (the `is_admin` flag on the
   pinned platform in `localStorage.tenants`), never the SDK `useIsAdmin()`.
-- **Members** sign in with SSO; they pay on `/paywall` only when the admin chose
-  a fee, and chat on `/`.
+- **Members** chat on `/`. Membership is the entitlement: a signed-in user the
+  platform does not know pays on `/paywall` (when the admin chose a fee) and is
+  linked as a member; a visitor without an account is sent to
+  https://ibl.ai/join first. Nobody who is a member ever sees a payment page.
 
 ### Map
 
-| Where                                                                                                   | What                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/(app)/`                                                                                            | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels) live here.                                                                                                                                  |
-| `app/(app)/(paid)/`                                                                                     | Behind `PaywallGate`: `/` (SDK `Chat`) and `/analytics/*` — the SDK `AnalyticsLayout` tab strip over eight pages (Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports), Admin mode only.                                                                                                         |
-| `app/paywall/`                                                                                          | Pricing page, Stripe Checkout hand-off, return page. Outside `(app)` on purpose: inside it the gate would loop.                                                                                                                                                                                                       |
-| `app/setup/`                                                                                            | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                 |
-| `app/sso-login-complete/`                                                                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                   |
-| `app/api/paywall/{access,checkout,prices}/`                                                             | Buyer rail: the server calls the platform with `IBLAI_API_KEY`, as the buyer.                                                                                                                                                                                                                                         |
-| `app/api/paywall/admin/setup/`                                                                          | Admin rail: one route that, for a paid answer, retires the old price, ensures the tagged product and creates the price, then records the choice — forwarding the admin's own DM token. Free records the choice only: zero Stripe calls, so it never needs a key.                                                      |
-| `lib/paywall.ts`, `lib/paywall-admin.ts`                                                                | Server-only paywall code, including the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                |
-| `lib/paywall-client.ts`, `components/paywall-gate.tsx`, `components/setup/`, `components/plan-card.tsx` | Browser side: the token header, the gate, the setup screen, the plan card.                                                                                                                                                                                                                                            |
-| `components/sidebar/`, `lib/chat-rows.ts`                                                               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows. |
-| `components/loading-screen.tsx`                                                                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                   |
-| `lib/iblai/`                                                                                            | `config.ts` (env accessors; `apiKey()` is server-only), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                               |
-| `providers/iblai-providers.tsx`, `store/iblai-store.ts`                                                 | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                               |
-| `.github/workflows/`                                                                                    | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                          |
-| `proxy.ts`                                                                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                       |
+| Where                                                                    | What                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/(app)/`                                                             | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels) live here.                                                                                                                                  |
+| `app/(app)/(paid)/`                                                      | No gate (whoever is signed in here is a member): `/` (SDK `Chat`) and `/analytics/*` — the SDK `AnalyticsLayout` tab strip over eight pages (Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports), Admin mode only.                                                                              |
+| `app/paywall/`                                                           | The join page (public), Stripe Checkout hand-off, return page. Outside `(app)` on purpose: it must render for people the platform does not know yet.                                                                                                                                                                  |
+| `app/setup/`                                                             | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                 |
+| `app/sso-login-complete/`                                                | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                   |
+| `app/api/paywall/{access,checkout,prices}/`                              | Buyer rail: the server calls the platform with `IBLAI_API_KEY` — as the platform (the key owner's path) to mint the checkout, verify the session and link the buyer; as the buyer for the ledger. `prices` is public and also carries the sign-up URL (`signUpUrl`).                                                  |
+| `app/api/paywall/admin/setup/`                                           | Admin rail: one route that, for a paid answer, retires the old price, ensures the tagged product and creates the price, then records the choice — forwarding the admin's own DM token. Free records the choice only: zero Stripe calls, so it never needs a key.                                                      |
+| `lib/paywall.ts`, `lib/paywall-admin.ts`                                 | Server-only paywall code, including the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                |
+| `lib/paywall-client.ts`, `components/setup/`, `components/plan-card.tsx` | Browser side: the token header, the setup and standing checks, the setup screen, the plan card.                                                                                                                                                                                                                       |
+| `components/sidebar/`, `lib/chat-rows.ts`                                | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows. |
+| `components/loading-screen.tsx`                                          | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                   |
+| `lib/iblai/`                                                             | `config.ts` (env accessors; `apiKey()` is server-only), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                               |
+| `providers/iblai-providers.tsx`, `store/iblai-store.ts`                  | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                               |
+| `.github/workflows/`                                                     | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                          |
+| `proxy.ts`                                                               | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                       |
 
 ### Invariants, and why
 
@@ -240,8 +247,11 @@ of users:
   page under the streaming root layout answers 200.
 - `IBLAI_API_KEY` and `PAYWALL_*` are server-only. Never prefix them with
   `NEXT_PUBLIC_`; never read them outside route handlers.
-- Platform admins bypass the gate on the client only. The platform stays the
-  entitlement authority for everyone else.
+- Membership is the entitlement. The app never gates a member: it sends a user
+  the platform does not know to `/paywall` when joining costs money, links a
+  verified payer with the platform's admin link API, and ends a membership only
+  when the platform says a recorded payment lapsed. The platform stays the
+  authority for who paid.
 - Nothing in the navbar for the setup: the way back is the quiet "Payments
   setup" link on `/account`.
 - One sidebar context: the shell is the SDK's `SidebarProvider` →
@@ -270,21 +280,70 @@ of users:
 
 ### Paywall and setup, end to end
 
-Two auth rails, one boundary (`lib/paywall.ts`):
+Membership is the entitlement. Three rails, one boundary (`lib/paywall.ts`):
 
-| Call                                                           | Who calls the platform         | Credential                               | Path user                             |
-| -------------------------------------------------------------- | ------------------------------ | ---------------------------------------- | ------------------------------------- |
-| access check, checkout, plan display                           | this server                    | `Api-Token IBLAI_API_KEY`                | the buyer, verified by `token/verify` |
-| read the platform's choice                                     | this server                    | none: platform metadata is a public read | none                                  |
-| retire/create product and price (paid only), record the choice | this server, from `/setup`     | the admin's own DM `Token`, forwarded    | the admin                             |
-| save the Stripe key                                            | the browser, through SDK hooks | the admin's own DM `Token`               | none                                  |
+| Call                                                                             | Who calls the platform         | Credential                               | Path user                                                  |
+| -------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------- | ---------------------------------------------------------- |
+| customer + checkout session, session retrieve, ledger list, link / unlink        | this server                    | `Api-Token IBLAI_API_KEY`                | the key's owner (a member); the buyer is named in metadata |
+| ledger record, live standing                                                     | this server                    | `Api-Token IBLAI_API_KEY`                | the buyer, verified by `token/verify`, a member by then    |
+| read the platform's choice, plan display                                         | this server                    | none: platform metadata is a public read | none                                                       |
+| retire/create product and price (paid only), self-join switch, record the choice | this server, from `/setup`     | the admin's own DM `Token`, forwarded    | the admin                                                  |
+| save the Stripe key                                                              | the browser, through SDK hooks | the admin's own DM `Token`               | none                                                       |
 
-The platform's Stripe proxy (`…/providers/stripe/payments/*`) is admin-only for
-every verb and answers 403 otherwise, and so is the platform-metadata write; so the
-setup route carries no admin check of its own — a 2xx from the platform is the
-proof. The platform allows checkout only for a price on an active product whose
-`metadata.app` equals `PAYWALL_APP_SLUG`; the setup route tags the product it
-creates.
+Why the app mints the checkout itself: the platform's own paywall checkout
+(`…/paywall/checkout/`) refuses a path user who is not a member, and a buyer
+is by definition not one yet. So `createCheckout` does what that endpoint
+does, through the generic Stripe proxy: a Customer with
+`metadata.ibl_username`, a session with `metadata: {ibl_username, app}` —
+the shape the platform's access check and ledger recognise afterwards.
+`verifyAndJoin` retrieves the session (`expand[]=subscription`), refuses one
+whose `ibl_username` is not the signed-in buyer (a leaked return URL joins
+nobody), requires `status: complete` and `payment_status: paid` (or a live
+subscription), links the buyer with `POST /api/core/users/platforms/`
+`{user_id, platform_key, active}` (the key is an admin credential), then
+calls `paywall/access/?session_id=` as the buyer so the platform records the
+payment. Nothing is a webhook: the platform's paywall is verified polling by
+design (BYO keys). A lapse is caught on the payer's next visit — the shell
+asks `/api/paywall/access` once per minute per session: `paywall/payments/?username=`
+says whether they ever paid (invited members and admins never did, so they
+are never checked), `paywall/access/` says whether it still grants, and a
+deny ends the membership (`active: false`) and sends them to `/paywall`.
+
+Who reaches `/paywall`: the providers hand the SDK an `authRedirect` that
+sends a user whose `localStorage.tenants` lacks the pinned key to `/paywall`
+when the platform is paid (one public read of `/api/paywall/prices`, cached
+for the page) and to the login SPA otherwise (`paywallEntry` in
+`lib/iblai/tenant.ts`). `/paywall` and `/paywall/return` are in
+`PUBLIC_ROUTES` and skip the `TenantProvider`. Sign-in returns them to
+`/paywall` (`redirectTo` in localStorage).
+
+A visitor without an account takes the platform's own $0 sign-up from the
+page's Create Account button (`signUpUrl()` in `lib/paywall.ts`, delivered by
+the public `prices` route): the DM's
+`…/api/service/stripe/checkout/redirect/credits-free-plan/` 302s to a Stripe
+Checkout that asks for an email only, creates the account and a platform of
+their own, and returns to its `redirect_url` with an `edx_jwt_token` appended.
+That `redirect_url` is the Auth SPA login URL the Sign in button already uses
+(`authLoginUrl()` in `lib/iblai/auth-utils.ts`), because only the SPA turns
+that token into a session (its `/login` page; nothing in the SDK reads it off
+a URL); the SPA comes back to `/sso-login-complete`, which goes to the
+`redirectTo` the page saved on click, `/paywall`, now signed in with the Buy
+button showing. Cancel goes to that same login URL: the DM allows only
+localhost, `*.iblai.app` and a platform's mirrored custom domains as redirect
+hosts, never ibl.ai hosting's `*.vercel.app`, so `/paywall` itself cannot be
+the cancel URL. The origin in those URLs, and in a purchase's Stripe return
+URLs, is `appBaseUrl()`: `IBLAI_APP_BASE_URL` when set, else the origin the
+request arrived on. The OS and the LMS do not use this flow: they send
+strangers to the SPA's `/join`, which self-joins them — closed on a paid
+platform.
+
+The platform's Stripe proxy (`…/providers/stripe/payments/*`) is admin-only
+for every verb and answers 403 otherwise, and so are the platform-metadata
+write and the self-join switch; so the setup route carries no admin check of
+its own — a 2xx from the platform is the proof. `allowedPriceIds()` keeps
+unknown ids off the wire; the setup route tags the product it creates with
+`metadata.app = PAYWALL_APP_SLUG`, which is what the platform's own paywall
+checkout enforces.
 
 The choice lives in the platform's metadata under `apps.<slug>`
 (`AppPaymentInfo` in `lib/paywall.ts`: `access` free / one_time / monthly,
@@ -297,12 +356,16 @@ included). So only ids and amounts go there, never a key or a secret. The server
 caches the read 60 s and the setup route invalidates it.
 
 What the app sells is `resolveCatalogue()`: `PAYWALL_PRICE_IDS` if set (display
-data from one Stripe retrieve each), else the recorded choice; free or unanswered
-means **no paywall**: `/api/paywall/access` answers `has_access: true` without
-asking the DM, checkout 400s, and `/paywall` says the app is free.
+data from one Stripe retrieve each, on the key owner's path), else the recorded
+choice; free or unanswered means **no paywall**: setup opens self-join
+(`allow_self_linking: true`, so the SDK joins anyone who signs in),
+`/api/paywall/access` answers `has_access: true` without asking the DM,
+checkout 400s, and `/paywall` says the app is free. A paid answer closes
+self-join: payment is the only way in.
 
-`PaywallGate` sends an admin to `/setup` once per session while the question is
-unanswered (`sessionStorage` key `paywall_setup_ok_at`). The screen (`components/setup/setup-screen.tsx`) pre-selects the current answer
+The shell (`app/(app)/layout.tsx`) sends an admin to `/setup` once per session
+while the question is unanswered (`sessionStorage` key `paywall_setup_ok_at`).
+The screen (`components/setup/setup-screen.tsx`) pre-selects the current answer
 and shows the price only for a paid choice. When the platform has no Stripe key,
 or the admin chooses Replace under the Save button (where the on-file key shows
 as first 3 + last 2 characters, all the DM reveals), a second screen asks for
@@ -310,22 +373,27 @@ the restricted key before saving. It posts `{access, amount}` with an
 `Idempotency-Key` the route suffixes per Stripe call.
 
 Where to change what: how a plan looks, `components/plan-card.tsx` and
-`lib/paywall-client.ts`; what is sellable, `lib/paywall.ts`; the setup order,
-`app/api/paywall/admin/setup/route.ts`; the question's copy, `components/setup/`.
+`lib/paywall-client.ts`; what is sellable and how a purchase becomes a
+membership, `lib/paywall.ts`; who is sent where, `paywallEntry` in
+`lib/iblai/tenant.ts` and the arrival effects in `app/(app)/layout.tsx`; the
+setup order, `app/api/paywall/admin/setup/route.ts`; the question's copy,
+`components/setup/`.
 
 ### Environment
 
 `.env.local` (gitignored; copy from `.env.example`):
 
-| Key                                                            | Server-only | When missing                                  |
-| -------------------------------------------------------------- | ----------- | --------------------------------------------- |
-| `NEXT_PUBLIC_MAIN_TENANT_KEY`                                  | no          | an alert instead of the app                   |
-| `NEXT_PUBLIC_DEFAULT_AGENT_ID`                                 | no          | alerts on `/`, `/analytics`, `/about`         |
-| `IBLAI_API_KEY`                                                | yes         | the buyer rail gets 401/502 from the platform |
-| `PAYWALL_APP_SLUG`                                             | yes         | every paywall route 500s, loudly, by design   |
-| `PAYWALL_PRICE_IDS`                                            | yes         | optional override of the recorded choice      |
-| `NEXT_PUBLIC_SHOW_ABOUT`                                       | no          | About hidden (the default)                    |
-| `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_TAURI_CUSTOM_SCHEME` | no          | code defaults                                 |
+| Key                                                            | Server-only | When missing                                                                                                                                                                                                             |
+| -------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_MAIN_TENANT_KEY`                                  | no          | an alert instead of the app                                                                                                                                                                                              |
+| `NEXT_PUBLIC_DEFAULT_AGENT_ID`                                 | no          | alerts on `/`, `/analytics`, `/about`                                                                                                                                                                                    |
+| `IBLAI_API_KEY`                                                | yes         | an alert instead of the app: the root layout refuses to render while the key is empty, a placeholder, rejected by the platform or another platform's (one config read, cached 5 min); the buyer routes 500 naming it too |
+| `PAYWALL_APP_SLUG`                                             | yes         | every paywall route 500s, loudly, by design                                                                                                                                                                              |
+| `PAYWALL_PRICE_IDS`                                            | yes         | optional override of the recorded choice                                                                                                                                                                                 |
+| `NEXT_PUBLIC_APP_NAME`                                         | no          | "this app" on the join page, "vibe-agent" as the tab title                                                                                                                                                               |
+| `IBLAI_APP_BASE_URL`                                           | yes         | the origin each request arrives on (right on localhost and on ibl.ai hosting); a set but malformed value 500s the paywall routes naming it                                                                               |
+| `NEXT_PUBLIC_SHOW_ABOUT`                                       | no          | About hidden (the default)                                                                                                                                                                                               |
+| `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_TAURI_CUSTOM_SCHEME` | no          | code defaults                                                                                                                                                                                                            |
 
 `iblai.env` (`DOMAIN`, `PLATFORM`, `TOKEN`) feeds the skills, not the app. Never
 echo `TOKEN` or `IBLAI_API_KEY`; fill secrets with an editor, not a shell.
@@ -341,9 +409,11 @@ echo `TOKEN` or `IBLAI_API_KEY`; fill secrets with an editor, not a shell.
 | `cargo check` in `src-tauri/` | two template dead-code warnings, no errors                                                                                                     |
 | `pnpm release`                | CI only: `release.yml` runs it on every push to `main`. Locally only `--dry-run --git.pushRepo=<remote>` (clones here have no `origin`).       |
 
-Manual smoke with placeholder credentials: `/` and `/setup` render their
-alerts; every `/api/paywall/*` route answers 401 without a token; `/about` 404s
-with the flag off.
+Manual smoke with placeholder credentials: every page renders only the
+`IBLAI_API_KEY` alert (the root layout refuses); with a valid key and a
+placeholder platform key, `/` and `/setup` render their alerts; every
+`/api/paywall/*` route answers 401 without a sign-in (500 naming the key while
+it is a placeholder); `/about` 404s with the flag off.
 
 ### Gotchas learned here
 
@@ -399,6 +469,14 @@ with the flag off.
   `github-actions[bot]`), whose pushes never trigger other workflows: a
   workflow that must run on the `v*` tag needs a personal access token, as
   in the OS.
+- The deploy skill builds `.env.production` from `.env.local` through a key
+  allowlist (`NEXT_PUBLIC_*`, `IBLAI_API_KEY`, `PAYWALL_*`, `CSP_MODE`) and
+  drops everything else: that is why the app's name is `NEXT_PUBLIC_APP_NAME`,
+  and why `IBLAI_APP_BASE_URL` is optional (a deployed app uses its own origin).
+- After deleting a route or layout file, `pnpm build` can fail its type check
+  on `.next/dev/types/validator.ts`, which the last `next dev` generated and
+  which still imports the deleted file. `rm -rf .next/dev/types` (or one
+  `next dev` run) regenerates it; nothing in the tree is wrong.
 
 ### Conventions
 

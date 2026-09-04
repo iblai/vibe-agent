@@ -4,20 +4,21 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   PAYWALL_APP_SLUG,
   PaywallUpstreamError,
+  appBaseUrl,
   resolveCatalogue,
-  userFromRequest,
+  signUpUrl,
 } from "../../../../lib/paywall";
 
-/** What this app sells (env override, else the platform's choice) — any member may read. */
+/** What this app sells (env override, else the platform's choice) and where a stranger signs up — public: the join page needs no sign-in. */
 export async function GET(req: NextRequest) {
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: "Not a platform member" }, { status: 401 });
   if (!PAYWALL_APP_SLUG)
     return NextResponse.json({ error: "PAYWALL_APP_SLUG not set" }, { status: 500 });
-
   try {
-    const catalogue = await resolveCatalogue(user.username);
-    return NextResponse.json({ app: PAYWALL_APP_SLUG, ...catalogue });
+    return NextResponse.json({
+      app: PAYWALL_APP_SLUG,
+      signUpUrl: signUpUrl(appBaseUrl(req)),
+      ...(await resolveCatalogue()),
+    });
   } catch (e) {
     // The metadata read or the env-override display lookup was refused
     // upstream (e.g. 400: no `stripe` credential yet) — actionable, pass it through.

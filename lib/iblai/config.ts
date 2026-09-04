@@ -34,6 +34,7 @@ const env = {
   NEXT_PUBLIC_DEFAULT_AGENT_ID: process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID,
   NEXT_PUBLIC_SUPPORT_EMAIL: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
   NEXT_PUBLIC_SHOW_ABOUT: process.env.NEXT_PUBLIC_SHOW_ABOUT,
+  NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
 };
 
 declare global {
@@ -101,6 +102,9 @@ const config = {
   supportEmail: () => getEnv("NEXT_PUBLIC_SUPPORT_EMAIL", "support@ibl.ai"),
   // The About tab is off unless this is exactly "true".
   showAbout: () => getEnv("NEXT_PUBLIC_SHOW_ABOUT", "") === "true",
+  // What the join page ("Join <name>") and the browser tab call this app; the
+  // platform's own name is never used for it.
+  appName: () => getEnv("NEXT_PUBLIC_APP_NAME", ""),
   platformBaseDomain: () => domain(),
 
   // Server-only: IBLAI_API_KEY is a secret and not NEXT_PUBLIC_*, so Next.js

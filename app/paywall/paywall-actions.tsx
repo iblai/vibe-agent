@@ -1,19 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { checkPaywallAccess } from "@/components/paywall-gate";
+import { useState } from "react";
 import { LoadingScreen } from "@/components/loading-screen";
+import { errorWithStatus, paywallFetch } from "@/lib/paywall-client";
 
-/** Entitled users landing here go straight back into the app. */
-export function PaywallAutoVerify() {
-  const router = useRouter();
-  useEffect(() => {
-    checkPaywallAccess().then((granted) => granted && router.replace("/"));
-  }, [router]);
-  return null;
-}
+/** The join page's one loud control: the buy button, or "create your account" for a stranger. */
+export const PRIMARY_BUTTON =
+  "inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#2563EB] to-[#93C5FD] px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
 
+/** Start the checkout for one plan; Stripe takes over from here. */
 export function BuyButton({ priceId }: { priceId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -21,66 +16,28 @@ export function BuyButton({ priceId }: { priceId: string }) {
   const buy = async () => {
     setBusy(true);
     setError("");
-    const token = localStorage.getItem("dm_token") ?? "";
-    const res = await fetch("/api/paywall/checkout", {
-      method: "POST",
-      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ price_id: priceId }),
-    });
-    const data = await res.json().catch(() => null);
-    if (data?.checkout_url) {
-      window.location.href = data.checkout_url;
-      return;
-    }
-    setError(data?.error ?? data?.detail ?? "Could not start checkout");
-    setBusy(false);
-  };
-
-  return (
-    <div className="space-y-2">
-      {busy && <LoadingScreen overlay message="Redirecting to payment…" />}
-      <button
-        onClick={buy}
-        disabled={busy}
-        className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#2563EB] to-[#93C5FD] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
-        {busy ? "Redirecting…" : "Continue to payment"}
-      </button>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-    </div>
-  );
-}
-
-export function RestoreAccessButton() {
-  const router = useRouter();
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const restore = async () => {
-    setMessage("");
-    setBusy(true);
     try {
-      const granted = await checkPaywallAccess();
-      if (granted) router.replace("/");
-      else setMessage("No payment found for your account.");
-    } catch {
-      setMessage("Could not check your payment. Try again.");
-    } finally {
+      const { checkout_url } = await paywallFetch<{ checkout_url: string }>(
+        "/api/paywall/checkout",
+        { method: "POST", json: { price_id: priceId } },
+      );
+      if (!checkout_url) throw new Error("The platform returned no checkout URL");
+      window.location.assign(checkout_url);
+    } catch (e) {
+      // The route's own words, with the status: a misconfigured key or a refused
+      // credential must read as what it is, not as "try again later".
+      setError(errorWithStatus(e));
       setBusy(false);
     }
   };
 
   return (
-    <div className="space-y-1">
-      {busy && <LoadingScreen overlay message="Checking your payment…" />}
-      <button
-        onClick={() => void restore()}
-        disabled={busy}
-        className="text-sm text-primary underline-offset-4 hover:underline disabled:opacity-50"
-      >
-        Already paid? Restore access
+    <div className="space-y-2">
+      {busy && <LoadingScreen overlay message="Redirecting to payment…" />}
+      <button onClick={() => void buy()} disabled={busy} className={PRIMARY_BUTTON}>
+        {busy ? "Redirecting…" : "Continue to payment"}
       </button>
-      {message && <p className="text-xs text-muted-foreground">{message}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
