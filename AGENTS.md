@@ -340,7 +340,7 @@ with the flag off.
 
 ### Conventions
 
-- Never `git commit` (the developer commits) and never `--no-verify`.
+- Never `git commit --no-verify`.
 - UI recedes: match the starter's quiet language, no new accent colours, no dialog
   where a row will do, nothing new in the navbar, nothing of ours in the sidebar
   footer (the SDK owns that cluster). Loud failure over silent fallback: an
@@ -351,4 +351,3 @@ with the flag off.
   payment) renders `LoadingScreen overlay` with a short message, and the form's
   controls stay disabled underneath; plain loading states render `LoadingScreen`
   too. No bespoke spinners or grey "Loading..." text.
-- Read DM source only at `~/Git/ibl.ai/dm/v2`.
