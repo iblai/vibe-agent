@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.2](https://github.com/iblai/vibe-agent/compare/v1.0.1...v1.0.2) (2026-09-04)
+
+### Documentation
+
+* scripted onboarding in AGENTS.md (admin check, platform key, agent uuid) ([3671306](https://github.com/iblai/vibe-agent/commit/3671306a79da490c86c607a5575c75c0699b8410))
+
 ## [1.0.1](https://github.com/iblai/vibe-agent/compare/v1.0.0...v1.0.1) (2026-09-04)
 
 ### CI
