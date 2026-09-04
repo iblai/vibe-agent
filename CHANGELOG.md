@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0](https://github.com/iblai/vibe-agent/compare/v1.0.2...v1.1.0) (2026-09-04)
+
+### Features
+
+* pay-to-join membership, platform sign-up, NEXT_PUBLIC_APP_NAME and IBLAI_APP_BASE_URL ([8befac7](https://github.com/iblai/vibe-agent/commit/8befac7a712f973b5ce6193385423ce2bab64973))
+
 ## [1.0.2](https://github.com/iblai/vibe-agent/compare/v1.0.1...v1.0.2) (2026-09-04)
 
 ### Documentation
