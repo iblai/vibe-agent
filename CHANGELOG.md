@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0](https://github.com/iblai/vibe-agent/compare/v1.3.4...v1.4.0) (2026-09-07)
+
+### Features
+
+* agent and name from the OS URL into env, paywall set up by scripts/paywall-setup.mjs, no in-app setup ([335d99e](https://github.com/iblai/vibe-agent/commit/335d99e67aa13ae96f69839d8531d004f4effffa))
+
 ## [1.3.4](https://github.com/iblai/vibe-agent/compare/v1.3.3...v1.3.4) (2026-09-07)
 
 ### Documentation
