@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { formatAmount, type CataloguePriceView } from "@/lib/paywall-client";
 
-/** One plan as buyers see it on /paywall (and in the setup wizard's last step). */
+/** One plan as buyers see it on /paywall. */
 export function PlanCard({ price, children }: { price: CataloguePriceView; children?: ReactNode }) {
   return (
     <div className="space-y-3 rounded-lg border border-border bg-background p-6">

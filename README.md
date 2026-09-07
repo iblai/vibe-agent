@@ -24,7 +24,7 @@ A single-platform app on ibl.ai: users sign in with ibl.ai SSO and chat with one
 
 <!-- Once deployed: "vibe-agent is deployed at [<host>](https://<host>)." -->
 
-vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode and answer the one setup question; **members** chat on `/`. Membership is the entitlement: when the admin chose a fee, a signed-in user who is not a member yet pays on `/paywall` and becomes one, and a visitor without an account types their email on `/paywall` and pays on the same page. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
+vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode; **members** chat on `/`. Membership is the entitlement: when the admin chose a fee, a signed-in user who is not a member yet pays on `/paywall` and becomes one, and a visitor without an account types their email on `/paywall` and pays on the same page. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
 
 ## Screenshots
 
@@ -37,11 +37,10 @@ vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A crea
 
 | Feature               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Chat**              | `/` — the SDK `Chat` with the one agent (`apps.vibe-agent.agent_id` in the platform's public metadata): streaming, sessions, files, voice. Paying users and platform admins.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Chat**              | `/` — the SDK `Chat` with the one agent (`NEXT_PUBLIC_DEFAULT_AGENT_ID`, the uuid at the end of its os.ibl.ai URL): streaming, sessions, files, voice. Paying users and platform admins.                                                                                                                                                                                                                                                                                                                                                                                        |
 | **Sidebar**           | The SDK `PlatformSidebar` — the shell the ibl.ai OS and LMS use — with this app's content: **New chat**, **Recents** (pinned chats first; each row can be pinned, unpinned or deleted) and, for admins in Admin mode, the **Analytics** menu. The bottom-left cluster is the SDK's: Notifications and Support for everyone, plus Invites, Management, Integrations, Monetization (when the platform sells credits) and Advanced for admins in Admin mode; the last four open the platform's account sheet in place. Collapses to an icon rail (Cmd/Ctrl+B), a drawer on phones. |
 | **Analytics**         | `/analytics/*` — the OS analytics section for this one agent: Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports (SDK `AnalyticsLayout` + stats components). Platform admins, in Admin mode.                                                                                                                                                                                                                                                                                                                                                              |
 | **Paywall**           | `/paywall` — the public join page: a stranger types their email and pays on the platform's own Stripe account, one Stripe page and no sign-up; the account is made for the email, paying makes them a member, and they land in the app signed in (automatically where ibl.ai allows it, by email code otherwise). The platform owns payments; free access never needs a Stripe key.                                                                                                                                                                                             |
-| **Setup**             | `/setup` — one question: free access, one-time fee or monthly fee (USD); the Stripe product and price are created for you. Opens itself for a platform admin until answered; reachable later from the quiet "Payments setup" link on `/account`.                                                                                                                                                                                                                                                                                                                                |
 | **User / Admin mode** | Platform admins get a User / Admin switch in the navbar (in the profile menu on narrow screens). User mode shows the app as a member sees it; Analytics and the admin cluster exist only in Admin mode. Starts on Admin, resets on reload.                                                                                                                                                                                                                                                                                                                                      |
 | **Profile**           | `/profile` — the SDK `Profile` panel, from the profile dropdown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Account**           | `/account` — the SDK `Account` panel (organization settings), admins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -71,7 +70,7 @@ Start Claude Code with `claude --chrome` and say:
 get https://github.com/iblai/vibe-agent
 ```
 
-It clones the repo and, as soon as it reads a file in it, follows the procedure in `AGENTS.md` in one run: it opens [login.iblai.app/me](https://login.iblai.app/me) in your browser and, if you are not signed in, asks one question — do you have an ibl.ai account? — then waits for you to sign in, or opens [ibl.ai/join](https://ibl.ai/join) to create your account and platform (it does not look at those pages while you fill them in); reads your platform key off `/me` (never the shared `main` platform: that one is everyone's, not yours), mints a Platform API Token for your platform from that session and writes `.env.local` and `iblai.env`; picks or creates the agent and saves it with the app's name in the platform's public metadata; starts the dev server and opens it; walks payments setup with you (a free app needs no Stripe key; for a paid one you type your restricted Stripe key into the app's Monetize screen yourself, unwatched, and it sets the price you choose); and publishes the app on ibl.ai hosting as `<name>.vercel.app`, asking only for the name. Without the browser extension it asks you for the two values it cannot read. If it only clones, say `follow AGENTS.md`; or start inside the clone — `git clone https://github.com/iblai/vibe-agent && cd vibe-agent && claude --chrome` — and say `run it`.
+It clones the repo and, as soon as it reads a file in it, follows the procedure in `AGENTS.md` in one run: it opens [login.iblai.app/me](https://login.iblai.app/me) in your browser and, if you are not signed in, asks one question — do you have an ibl.ai account? — then waits for you to sign in, or opens [ibl.ai/join](https://ibl.ai/join) to create your account and platform (it does not look at those pages while you fill them in); reads your platform key off `/me` (never the shared `main` platform: that one is everyone's, not yours); opens [os.ibl.ai](https://os.ibl.ai), takes the agent from the URL it lands on, mints a Platform API Token for your platform from that session and writes `.env.local` and `iblai.env` (platform, agent, token, and a name for the app — it suggests a readable one from what the agent does, you confirm or replace it); asks whether access is free, one-time or monthly and the price, and sets it up on the platform from the terminal (a free app needs no Stripe key; for a paid one you paste your restricted Stripe key into the platform yourself, in the OS's Integrations dialog, unwatched); starts the dev server and opens it; and publishes the app on ibl.ai hosting as `<name>.vercel.app`, asking only for the name. Without the browser extension it asks you for the values it cannot read. If it only clones, say `follow AGENTS.md`; or start inside the clone — `git clone https://github.com/iblai/vibe-agent && cd vibe-agent && claude --chrome` — and say `run it`.
 
 By hand:
 
@@ -89,17 +88,16 @@ By hand:
    cp .env.example .env.local
    ```
 
-   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`) and `IBLAI_API_KEY` (= `TOKEN`); `IBLAI_APP_BASE_URL` can stay empty (the app uses the origin it is reached on for its return URLs). The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. A missing or placeholder platform key shows an alert instead of an app, and so does an `IBLAI_API_KEY` that is missing, a placeholder, rejected by the platform or another platform's (the app checks it against the platform before rendering anything).
+   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`), `IBLAI_API_KEY` (= `TOKEN`), `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the agent's uuid, the last path segment of `https://os.ibl.ai/platform/<platform-key>/<agent-uuid>`) and `NEXT_PUBLIC_APP_NAME` (what the join page and the browser tab call the app: two or three plain words in Title Case, e.g. `Babatunde Tutor`, never a slug); `IBLAI_APP_BASE_URL` can stay empty (the app uses the origin it is reached on for its return URLs). The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. A missing or placeholder platform key shows an alert instead of an app, and so does an `IBLAI_API_KEY` that is missing, a placeholder, rejected by the platform or another platform's (the app checks it against the platform before rendering anything); a missing agent shows one on `/`.
 
-3. The agent and the app's name live on the platform, not in env — one write to the platform's public metadata, with the token:
+3. Decide what access costs — free, one-time or monthly (USD) — and set it up on the platform with the token in `.env.local`:
 
    ```bash
-   curl -X PUT "https://api.iblai.app/dm/api/core/orgs/$PLATFORM/metadata/" \
-     -H "Authorization: Api-Token $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"metadata":{"apps":{"vibe-agent":{"agent_id":"<agent uuid>","app_name":"<what you call the app>"}}}}'
+   node scripts/paywall-setup.mjs free
+   node scripts/paywall-setup.mjs monthly 29.99   # or: one_time 49
    ```
 
-   The agent uuid is the last path segment of `https://os.ibl.ai/platform/<platform-key>/<agent-uuid>`. The write deep-merges, so the paywall choice kept under the same object survives.
+   A paid answer first needs the platform's Stripe key on file: in [os.ibl.ai](https://os.ibl.ai), Admin mode, Integrations (the sidebar's bottom cluster) → Data Sources → Add Data Source → Stripe, paste a **restricted** key (see Paywall below). Free needs none.
 
 4. Install and run:
 
@@ -119,7 +117,7 @@ pnpm start
 
 ## Paywall
 
-Paying the creator makes the buyer a member of the platform, and that membership is the entitlement: a signed-in member never sees a payment page. The platform (DM) owns every payment: it mints Stripe Checkout sessions on the platform's own Stripe key, records payments, and checks subscriptions live. No Stripe Connect, no commission, no webhooks, and no Stripe key in this app. The app has the server routes under `app/api/paywall/`, the join page (`app/paywall/`, public, headed "Join <`app_name`>", the name saved in the platform's metadata) and the setup screen (`app/setup`, `components/setup/setup-screen.tsx`).
+Paying the creator makes the buyer a member of the platform, and that membership is the entitlement: a signed-in member never sees a payment page. The platform (DM) owns every payment: it mints Stripe Checkout sessions on the platform's own Stripe key, records payments, and checks subscriptions live. No Stripe Connect, no commission, no webhooks, and no Stripe key in this app. The app has the server routes under `app/api/paywall/`, the join page (`app/paywall/`, public, headed "Join <`NEXT_PUBLIC_APP_NAME`>") and the setup script (`scripts/paywall-setup.mjs`, run from the terminal by the creator or by the Get and run procedure; the app itself has no setup screen).
 
 Who gets in:
 
@@ -128,12 +126,12 @@ Who gets in:
 - **A signed-in user who is not a member** lands on `/paywall` when joining costs money: one plan, one button, the email locked to their account. Back from Stripe, the server verifies the session on the platform's account and links them with the platform's admin link API. On a free platform there is no page: setup opens self-join and the SDK joins them at sign-in.
 - **A payer whose subscription lapsed** is caught on their next visit: the platform's ledger says they paid, the live check says it no longer grants, the membership ends and they see `/paywall` again.
 
-Setup is one question, asked of a platform admin the first time they open the app (and reachable later from the quiet "Payments setup" link on `/account`):
+Setup is one question, answered from the terminal — `node scripts/paywall-setup.mjs free | one_time <usd> | monthly <usd>`, with `IBLAI_API_KEY` from `.env.local` (the Get and run procedure asks it and runs this; run it again to change the answer):
 
 - **Free access** — anyone who signs in joins. No Stripe needed, ever.
-- **One-time fee** or **Monthly fee** — enter the price (USD). The first time, a second screen ("Monetize Your Agent") asks for a **restricted** Stripe key (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions). It is saved as the platform's `stripe` integration credential on the platform, browser to platform; this app's server never sees it.
+- **One-time fee** or **Monthly fee** — the price in USD. First, the platform needs a **restricted** Stripe key on file (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions), saved as the platform's `stripe` integration credential in the OS: [os.ibl.ai](https://os.ibl.ai) → Integrations (the sidebar's bottom cluster) → Data Sources → Add Data Source → Stripe. This app never sees it.
 
-For a paid answer, Save creates the Stripe product (named after the platform, tagged `metadata.app = PAYWALL_APP_SLUG`) and the price, retires the previous price if the answer changed, closes self-join (payment is the only way in), and records the choice in the platform's metadata under `apps.<PAYWALL_APP_SLUG>`. Free opens self-join and records the choice, touching Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
+For a paid answer the script creates the Stripe product (named after the app, tagged `metadata.app = PAYWALL_APP_SLUG`) and the price, retires the previous price if the answer changed, closes self-join (payment is the only way in), and records the choice in the platform's metadata under `apps.<PAYWALL_APP_SLUG>`. Free opens self-join and records the choice, touching Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
 
 ```json
 {
@@ -225,14 +223,14 @@ Never edit `CHANGELOG.md` or the `package.json` version by hand. `pnpm release` 
 
 ## Testing
 
-| Command                                | Does                                                                                                                          |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`, `pnpm build`, `pnpm start` | Next.js with Turbopack. `next build` type-checks with the project-local TypeScript 7 `tsc`                                    |
-| `pnpm typecheck`                       | `oxlint --type-check` (tsgo diagnostics)                                                                                      |
-| `pnpm lint`, `pnpm check`              | `oxlint --type-aware`; lint plus typecheck                                                                                    |
-| `pnpm fmt`, `pnpm fmt:check`           | oxfmt                                                                                                                         |
-| `pnpm test`                            | vitest (config, source paths, platform resolution, paywall helpers, platform-metadata store, route handlers, chat-row labels) |
-| `pnpm test:e2e`                        | Playwright against real SSO (credentials in `e2e/.env.development`)                                                           |
+| Command                                | Does                                                                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`, `pnpm build`, `pnpm start` | Next.js with Turbopack. `next build` type-checks with the project-local TypeScript 7 `tsc`                                                              |
+| `pnpm typecheck`                       | `oxlint --type-check` (tsgo diagnostics)                                                                                                                |
+| `pnpm lint`, `pnpm check`              | `oxlint --type-aware`; lint plus typecheck                                                                                                              |
+| `pnpm fmt`, `pnpm fmt:check`           | oxfmt                                                                                                                                                   |
+| `pnpm test`                            | vitest (config, source paths, platform resolution, paywall helpers, platform-metadata store, route handlers, the paywall setup script, chat-row labels) |
+| `pnpm test:e2e`                        | Playwright against real SSO (credentials in `e2e/.env.development`)                                                                                     |
 
 Run `pnpm check`, `pnpm test` and `pnpm build` before a pull request; `pnpm test:e2e` when you change a user journey.
 
@@ -250,25 +248,23 @@ app/
 │   │   └── analytics/                  # SDK <AnalyticsLayout> over eight pages
 │   ├── about/  profile/  account/  notifications/[[...id]]/
 ├── paywall/                            # The join page (public), checkout hand-off, return page
-├── setup/                              # The one setup question (outside the shell, no navbar)
 ├── sso-login-complete/                 # SSO landing
 └── api/paywall/
-    ├── access/  checkout/  prices/     # Buyer rail — this server as the buyer, with IBLAI_API_KEY
-    └── admin/setup/                    # Admin rail — forwards the admin's own platform token
+    └── access/  checkout/  prices/     # Buyer rail — this server as the buyer, with IBLAI_API_KEY
 components/
 ├── sidebar/                            # app-sidebar.tsx (PlatformSidebar wrapper), recent-chats.tsx, chat-row.tsx, flat-nav-row.tsx
 ├── navbar/                             # nav-bar.tsx, logo.tsx, user-profile-button.tsx, admin-mode-switch.tsx
-├── setup/setup-screen.tsx              # The question, then the Stripe key screen
 ├── loading-screen.tsx                  # The one loading / busy screen (OS look)
 └── plan-card.tsx
 lib/
-├── paywall.ts  paywall-admin.ts        # Server-only: checkout, join, standing, platform-metadata store, catalogue
-├── paywall-client.ts                   # Browser side: token header, catalogue, setup and standing checks
+├── paywall.ts                          # Server-only: checkout, join, standing, platform-metadata read, catalogue
+├── paywall-client.ts                   # Browser side: token header, catalogue, standing check
 ├── chat-rows.ts                        # Recents row labels
 └── iblai/                              # config.ts (env), tenant.ts, admin-mode.tsx, auth-utils.ts, storage-service.ts
 providers/iblai-providers.tsx           # initializeDataLayer + AuthProvider + TenantProvider + i18n
 store/iblai-store.ts                    # Redux store (slice keys fixed by the SDK)
 proxy.ts                                # CSP and the 404 for /about when the flag is off
+scripts/paywall-setup.mjs               # The paywall setup from the terminal: free / one-time / monthly, with IBLAI_API_KEY
 src-tauri/                              # Thin WebView shell for desktop and mobile
 .github/workflows/                      # release.yml (release-it on every push to main), tauri-build-desktop.yml (desktop bundles on demand)
 .husky/commit-msg                       # commitlint

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     .trim()
     .toLowerCase();
   try {
-    // PAYWALL_PRICE_IDS if set, else the price the admin chose at /setup: only
+    // PAYWALL_PRICE_IDS if set, else the recorded choice (scripts/paywall-setup.mjs): only
     // a price this app sells goes on the wire.
     if (!price_id || !(await allowedPriceIds()).includes(price_id))
       return NextResponse.json({ error: "Unknown price_id" }, { status: 400 });

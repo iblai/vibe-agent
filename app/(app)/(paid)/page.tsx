@@ -88,8 +88,9 @@ function AgentChat() {
   if (!mentorId) {
     return (
       <p role="alert" className="p-8 text-sm text-destructive">
-        No agent is configured. The platform’s public metadata needs apps.vibe-agent.agent_id (the
-        Get and run procedure in AGENTS.md writes it).
+        No agent is configured: set NEXT_PUBLIC_DEFAULT_AGENT_ID in .env.local to the agent’s uuid,
+        the last path segment of its os.ibl.ai URL (the Get and run procedure in AGENTS.md writes
+        it).
       </p>
     );
   }
