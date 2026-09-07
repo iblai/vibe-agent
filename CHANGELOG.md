@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0](https://github.com/iblai/vibe-agent/compare/v1.1.0...v1.2.0) (2026-09-07)
+
+### Features
+
+* refactor onboarding ([9bf51b0](https://github.com/iblai/vibe-agent/commit/9bf51b08d07da3a3d9ed4d8b4d5053d873e7765d))
+
 ## [1.1.0](https://github.com/iblai/vibe-agent/compare/v1.0.2...v1.1.0) (2026-09-04)
 
 ### Features
