@@ -24,7 +24,8 @@ only questions are the ones the steps name). If the repo is not cloned yet,
 inside it (`cd vibe-agent` for every command) so this file governs; this
 section is the procedure. It is written for a Claude that controls a
 browser; where it cannot, each browser step says what the person does
-instead. Never enter credentials for the person, never print `.env.local`,
+instead. Never type the person's password or card for them; the Platform
+API Token is yours to mint and to write into env. Never print `.env.local`,
 `iblai.env` or a token, and never ask for a key or token in chat.
 
 1. **Sign the creator in.** Open https://login.iblai.app/me. A sign-in
@@ -40,28 +41,58 @@ instead. Never enter credentials for the person, never print `.env.local`,
    Without a browser: the same two choices with the links, and wait for
    them to say they are in.
 2. **Read the platform off `/me`.** The page lists the account's username
-   and every platform with its key. One platform → take it; several → ask
-   which. Check it: `curl -fsS https://api.iblai.app/dm/api/core/orgs/<key>/metadata/`
-   is a public read, 200 means it exists, 404 means a typo. Without a
-   browser: ask for the key as listed on `/me`.
-3. **Mint the Platform API Token, at once, and put it in env.** From the
-   `login.iblai.app` tab read `localStorage.getItem("dm_token")` (the
-   extension's `javascript_tool`), then
-   `POST https://api.iblai.app/dm/api/core/platform/api-tokens/` with
-   `Authorization: Token <dm_token>` and
-   `{"username": "<username>", "name": "vibe-agent", "key": "", "platform_key": "<key>", "created": "<ISO now>", "expires": ""}`;
-   the answer's `key` is the token, shown once. `(platform_key, name)` is
-   unique: on a 400 use `vibe-agent-2`; on 401/403 the session is scoped to
-   another platform — have them switch to the right one in os.ibl.ai (org
-   dropdown) and read `dm_token` again. Write the env files from their
-   templates, changing nothing else: `cp .env.example .env.local` with
-   `NEXT_PUBLIC_MAIN_TENANT_KEY=<key>` and `IBLAI_API_KEY=<token>`;
-   `cp iblai.env.example iblai.env` with `PLATFORM=<key>` and
-   `TOKEN=<token>`. `PAYWALL_APP_SLUG` stays `vibe-agent`. Steps 1–3 are
-   one motion for a new creator: register, and the key and token are in
-   env. Without a browser: they create a token themselves (os.ibl.ai → any
-   agent → Edit → API → Create API key) and put it in both files with an
-   editor; wait for them to say it is done.
+   and every platform with its key. **`main` is never a choice**: it is
+   ibl.ai's shared default platform that everyone lands in, not the
+   person's own, and this app refuses it. Leave it out; one other platform
+   → take it; several → ask which; none besides `main` → they have no
+   platform of their own yet: go back to step 1's "No, create one for me"
+   (ibl.ai/join). Check the key:
+   `curl -fsS https://api.iblai.app/dm/api/core/orgs/<key>/metadata/` is a
+   public read, 200 means it exists, 404 means a typo. Without a browser:
+   ask for the key as listed on `/me`, `main` excluded.
+3. **Mint the Platform API Token, at once, and put it in env yourself.**
+   From the `login.iblai.app` tab read `localStorage.getItem("dm_token")`
+   and `localStorage.getItem("current_tenant")` (the extension's
+   `javascript_tool`; the second says which platform that session is scoped
+   to). Then run this one command with `<key>`, `<username>` and
+   `<dm_token>` filled in: it mints the token and writes both env files from
+   their templates in one go, and prints a masked confirmation only — the
+   token itself appears nowhere. You do this. Do not show the token, do not
+   say it back, do not ask them to copy it anywhere.
+
+   ```bash
+   KEY=<key>; USERNAME=<username>; DM_TOKEN=<dm_token>; NAME=vibe-agent
+   RESP=$(curl -sS -X POST https://api.iblai.app/dm/api/core/platform/api-tokens/ \
+     -H "Authorization: Token $DM_TOKEN" -H 'Content-Type: application/json' \
+     -d "{\"username\":\"$USERNAME\",\"name\":\"$NAME\",\"key\":\"\",\"platform_key\":\"$KEY\",\"created\":\"$(date -u +%FT%TZ)\",\"expires\":\"\"}")
+   TOKEN=$(printf '%s' "$RESP" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("key",""))' 2>/dev/null)
+   [ -n "$TOKEN" ] || { echo "mint failed: $(printf '%s' "$RESP" | head -c 300)"; exit 1; }
+   [ -f .env.local ] || cp .env.example .env.local; [ -f iblai.env ] || cp iblai.env.example iblai.env
+   python3 - "$KEY" "$TOKEN" <<'PY'
+   import pathlib, re, sys
+   key, tok = sys.argv[1], sys.argv[2]
+   for f, pairs in ((".env.local", [("NEXT_PUBLIC_MAIN_TENANT_KEY", key), ("IBLAI_API_KEY", tok)]),
+                    ("iblai.env", [("PLATFORM", key), ("TOKEN", tok)])):
+       p = pathlib.Path(f); s = p.read_text()
+       for k, v in pairs:
+           s = re.sub(rf"^{k}=.*$", f"{k}={v}", s, flags=re.M)
+       p.write_text(s)
+   PY
+   echo "written: platform $KEY, token ${TOKEN:0:3}…${TOKEN: -2} in .env.local and iblai.env"
+   ```
+
+   "mint failed … must make a unique set" → run it again with
+   `NAME=vibe-agent-2`. **Never mint a token for `main`**: `KEY` is the
+   person's own platform from step 2, and if `current_tenant` is `main` (a
+   fresh account often is) or the mint answers 401/403, have them switch to
+   their platform in os.ibl.ai (org dropdown, top right), then read
+   `dm_token` again. `PAYWALL_APP_SLUG` stays `vibe-agent`; change nothing
+   else in either file. Steps 1–3 are one motion for a new creator:
+   register, and the key and token are in env. Without a browser: they
+   create a token themselves (os.ibl.ai → any agent → Edit → API → Create
+   API key) and put it in both files with an editor; wait for them to say it
+   is done.
+
 4. **The agent and the app's name.** With the token, list the platform's
    agents: `GET https://api.iblai.app/dm/api/search/orgs/<key>/users/<username>/mentors/`
    (`Authorization: Api-Token $IBLAI_API_KEY`, the value read from
