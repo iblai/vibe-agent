@@ -24,7 +24,7 @@ A single-platform app on ibl.ai: users sign in with ibl.ai SSO and chat with one
 
 <!-- Once deployed: "vibe-agent is deployed at [<host>](https://<host>)." -->
 
-vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode and answer the one setup question; **members** chat on `/`. Membership is the entitlement: when the admin chose a fee, a signed-in user who is not a member yet pays on `/paywall` and becomes one, and a visitor without an account creates one at [ibl.ai/join](https://ibl.ai/join) first. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
+vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode and answer the one setup question; **members** chat on `/`. Membership is the entitlement: when the admin chose a fee, a signed-in user who is not a member yet pays on `/paywall` and becomes one, and a visitor without an account types their email on `/paywall` and pays on the same page. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
 
 ## Screenshots
 
@@ -81,7 +81,7 @@ By hand:
    cp iblai.env.example iblai.env
    ```
 
-   `PLATFORM` is your platform key (listed on https://login.iblai.app/me); `TOKEN` is a Platform API Token (os.ibl.ai → any agent → Edit → API → Create API key).
+   `PLATFORM` is your platform key (listed on https://login.iblai.app/me); `TOKEN` is a Platform API Token (os.ibl.ai → Integrations, in the sidebar's bottom cluster → APIs → Add API; the key is shown once).
 
 2. App env goes in `.env.local`:
 

@@ -57,11 +57,13 @@ ladder — take the next rung.
    Four rungs; each ends with the same write, and the token is never shown,
    never said back, never asked for in chat. A refusal on one rung means the
    next rung, not a stop.
-   - **Rung 1, the OS tab.** Open `https://os.ibl.ai/platform/<key>/` (the
-     platform from step 2; the OS signs them in through the session they
-     already have). In that tab read `localStorage.getItem("dm_token")` with
-     the extension's `javascript_tool` — the OS scopes it to that platform,
-     so `main` never comes into it — and run this one command with `<key>`,
+   - **Rung 1, the OS tab.** Open `https://os.ibl.ai` (the OS signs them in
+     through the session they already have and lands them on a platform;
+     the org shown top left must be the one from step 2 — if it is another,
+     or `main`, switch with that org dropdown). In that tab read
+     `localStorage.getItem("dm_token")` with the extension's
+     `javascript_tool` — the OS scopes it to the platform shown, so `main`
+     never comes into it — and run this one command with `<key>`,
      `<username>` and `<dm_token>` filled in: it mints the token and writes
      both env files from their templates in one go, and prints a masked
      confirmation only; the token itself appears nowhere.
@@ -88,16 +90,17 @@ ladder — take the next rung.
      ```
 
      "mint failed … must make a unique set" → run it again with
-     `NAME=vibe-agent-2`. 401/403 → that tab is on another platform: open
-     `https://os.ibl.ai/platform/<key>/` again (the org dropdown, top right,
-     if it does not switch) and read `dm_token` once more. **Never mint a
-     token for `main`.**
+     `NAME=vibe-agent-2`. 401/403 → that tab is on another platform: switch
+     to the right one with the org dropdown (top left) and read `dm_token`
+     once more. **Never mint a token for `main`.**
 
    - **Rung 2, the OS creates the key.** If the tool refuses to read storage,
-     or you will not touch a session token: on that OS page open an agent —
-     none yet → `https://os.ibl.ai/create-mentor` first, named after the app
-     — then Edit → the **API** tab → Create API key, name `vibe-agent`. The
-     modal shows the key in a read-only field: read the field's value with
+     or you will not touch a session token: on that same `https://os.ibl.ai`
+     tab (the right org top left, Admin mode on — the User/Admin toggle at
+     the top right) open **Integrations** in the sidebar's bottom cluster →
+     the **APIs** tab → **Add API** → API Key Name `vibe-agent`, expiry left
+     empty, Owner permissions left selected → **Submit**. The **API Key**
+     dialog shows the key in a read-only field: read the field's value with
      `read_page` (no screenshot), then run the write-only half, the value in
      place of the mint:
 
@@ -117,11 +120,11 @@ ladder — take the next rung.
      echo "written: platform $KEY, token ${TOKEN:0:3}…${TOKEN: -2} in .env.local and iblai.env"
      ```
 
-     Close the modal.
+     Close the dialog.
 
-   - **Rung 3, the person clicks Create.** If the tool will not click for
-     you, ask them to press Create in that modal — nothing else — then read
-     the field yourself and write as in rung 2.
+   - **Rung 3, the person clicks Submit.** If the tool will not click for
+     you, ask them to press Submit in that Create API Key dialog — nothing
+     else — then read the field yourself and write as in rung 2.
    - **Last resort**, only if reading the page is refused too: they put the
      key in `.env.local` as `IBLAI_API_KEY` and in `iblai.env` as `TOKEN`
      with an editor; wait for "done". Even then no "copy this" with a value
@@ -130,7 +133,7 @@ ladder — take the next rung.
    `PAYWALL_APP_SLUG` stays `vibe-agent`; change nothing else in either file.
    Steps 1–3 are one motion for a new creator: register, and the key and
    token are in env. Without a browser: the last resort, with the OS path
-   (os.ibl.ai → any agent → Edit → API → Create API key) spelled out.
+   (os.ibl.ai → Integrations → APIs → Add API) spelled out.
 
 4. **The agent and the app's name.** With the token, list the platform's
    agents: `GET https://api.iblai.app/dm/api/search/orgs/<key>/users/<username>/mentors/`
