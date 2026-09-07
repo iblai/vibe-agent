@@ -82,6 +82,15 @@ export async function userFromRequest(req: Request): Promise<PaywallUser | null>
   return token ? resolveUser(token) : null;
 }
 
+/** The caller's own token plus their verified identity — the admin route needs both. */
+export async function callerFromRequest(
+  req: Request,
+): Promise<{ token: string; user: PaywallUser } | null> {
+  const token = tokenFromRequest(req);
+  const user = token ? await resolveUser(token) : null;
+  return user ? { token, user } : null;
+}
+
 /** RequestInit with plain-object headers, so they merge by spread. */
 export type DmInit = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
@@ -106,6 +115,16 @@ function dmFetch(authorization: string, username: string, path: string, init?: D
 /** Call a DM paywall endpoint as {username} with the org-wide Api-Token. */
 export function dmPaywallFetch(username: string, path: string, init?: DmInit) {
   return dmFetch(apiTokenHeader(), username, path, init);
+}
+
+/**
+ * Call the DM Stripe proxy as {username} with the caller's OWN DM token — the
+ * admin rail. The DM enforces admin-only itself (403 for anyone else), so a
+ * 2xx here is the proof that lets the setup route go on. The org-wide
+ * Api-Token never travels this path.
+ */
+export function dmStripeFetchAs(token: string, username: string, path: string, init?: DmInit) {
+  return dmFetch(`Token ${token}`, username, path, init);
 }
 
 /** A DM/Stripe failure to pass through verbatim (status + body). */
@@ -257,10 +276,13 @@ const metadataUrl = () => `${config.dmUrl()}/api/core/orgs/${config.mainTenantKe
 
 type InfoRead = { info: AppPaymentInfo | null; platformName: string };
 
-// ponytail: 60s cache per lambda. The choice is written out of process
-// (scripts/paywall-setup.mjs), so a change shows within a minute.
+// ponytail: 60s cache per lambda; the setup route invalidates after writing.
 let infoCache: (InfoRead & { at: number }) | null = null;
 const INFO_TTL_MS = 60_000;
+
+export function invalidateAppPaymentInfo(): void {
+  infoCache = null;
+}
 
 const isPaymentInfo = (x: unknown): x is AppPaymentInfo =>
   !!x &&
@@ -279,6 +301,19 @@ export async function readAppPaymentInfo(): Promise<InfoRead> {
     platformName: String(body?.platform_name ?? ""),
   };
   return infoCache;
+}
+
+/** Write apps.<slug> as the admin (their own token; the DM checks the role). */
+export async function writeAppPaymentInfo(token: string, info: AppPaymentInfo): Promise<void> {
+  await dmJson(
+    await fetch(metadataUrl(), {
+      method: "PUT",
+      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata: { apps: { [PAYWALL_APP_SLUG]: info } } }),
+      cache: "no-store",
+    }),
+  );
+  invalidateAppPaymentInfo();
 }
 
 /** The ids this app may sell right now: env override, else the platform's choice. */

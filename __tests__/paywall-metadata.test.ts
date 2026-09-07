@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 /**
  * The app's paywall choice lives in the platform's PUBLIC metadata
- * (apps.<slug>), written out of process by scripts/paywall-setup.mjs. These
- * tests pin: the read needs no credential and is cached; env > metadata >
- * nothing when resolving what is for sale; and upstream refusals pass through
- * instead of turning into a silent "free".
+ * (apps.<slug>). These tests pin: the read needs no credential and is cached;
+ * the write is one deep-merge PUT with the admin's own token and every key
+ * present; env > metadata > nothing when resolving what is for sale; and
+ * upstream refusals pass through instead of turning into a silent "free".
  */
 
 const ENV_KEYS = [
@@ -83,6 +83,48 @@ describe("readAppPaymentInfo", () => {
     );
     const { readAppPaymentInfo } = await loadPaywall();
     expect((await readAppPaymentInfo()).info).toBeNull();
+  });
+});
+
+describe("writeAppPaymentInfo", () => {
+  it("PUTs one deep-merge body with the admin's own token and drops the read cache", async () => {
+    let stored: Record<string, unknown> = {};
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (init?.method === "PUT") {
+        stored = JSON.parse(init.body as string).metadata.apps;
+        return Response.json({ platform_key: "testorg", platform_name: "Acme", metadata: {} });
+      }
+      return metadataResponse(stored);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { readAppPaymentInfo, writeAppPaymentInfo } = await loadPaywall();
+
+    expect((await readAppPaymentInfo()).info).toBeNull();
+    await writeAppPaymentInfo("dm-abc", info() as never);
+    expect((await readAppPaymentInfo()).info).toEqual(info());
+
+    const [putUrl, putInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT") as [
+      string,
+      RequestInit,
+    ];
+    expect(putUrl).toBe(META_URL);
+    expect((putInit.headers as Record<string, string>).Authorization).toBe("Token dm-abc");
+    expect(JSON.parse(putInit.body as string)).toEqual({
+      metadata: { apps: { "demo-app": info() } },
+    });
+  });
+
+  it("passes the DM's refusal through", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () =>
+        Response.json({ error: "Permission denied" }, { status: 403 }),
+      ),
+    );
+    const { writeAppPaymentInfo, PaywallUpstreamError } = await loadPaywall();
+    await expect(writeAppPaymentInfo("dm-abc", info() as never)).rejects.toBeInstanceOf(
+      PaywallUpstreamError,
+    );
   });
 });
 

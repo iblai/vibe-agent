@@ -41,8 +41,8 @@ function joinLine(prices: CatalogueView["prices"]): string {
 }
 
 // The join page. The plans come from /api/paywall/prices: PAYWALL_PRICE_IDS if
-// set, else the recorded choice (platform metadata, apps.<slug>, written by
-// scripts/paywall-setup.mjs). Paying makes the buyer a member of the platform: a signed-in
+// set, else the choice the admin made at /setup (platform metadata,
+// apps.<slug>). Paying makes the buyer a member of the platform: a signed-in
 // user with their own account, or a stranger with the account made for the
 // email they type here — one Stripe page, no sign-up page.
 export default function PaywallPage() {

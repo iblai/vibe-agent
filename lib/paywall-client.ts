@@ -1,7 +1,8 @@
 // lib/paywall-client.ts — browser-side helpers for the paywall routes. The
 // user's DM token (written to localStorage by the SDK at sign-in) is the only
-// credential the browser holds; the server maps it to an identity. Never
-// import from a server file.
+// credential the browser holds; the server maps it to an identity and, for
+// the setup route, forwards it to the platform, which decides who is an
+// admin. Never import from a server file.
 
 export type Access = "free" | "one_time" | "monthly";
 
@@ -98,6 +99,28 @@ export const errorMessage = (e: unknown) =>
 export const errorWithStatus = (e: unknown) =>
   e instanceof PaywallRequestError ? `${e.message} (${e.status})` : errorMessage(e);
 
+const SETUP_OK_KEY = "paywall_setup_ok_at";
+const SETUP_TTL_MS = 600_000;
+
+/** This admin session already knows the paywall choice has been made. */
+export function setupSettled(): boolean {
+  return Date.now() - Number(sessionStorage.getItem(SETUP_OK_KEY) ?? 0) < SETUP_TTL_MS;
+}
+export const markSetupDone = () => sessionStorage.setItem(SETUP_OK_KEY, String(Date.now()));
+
+/** "decided" (a choice exists, or env decides), "undecided" (first run), "unknown" (hiccup). */
+export async function checkPaywallSetup(): Promise<"decided" | "undecided" | "unknown"> {
+  try {
+    const { decided } = await fetchCatalogue();
+    if (!decided) return "undecided";
+    markSetupDone();
+    return "decided";
+  } catch (e) {
+    console.error("[paywall] setup check failed:", e);
+    return "unknown";
+  }
+}
+
 const ACCESS_OK_KEY = "paywall_ok_at";
 const ACCESS_TTL_MS = 60_000;
 
@@ -120,6 +143,10 @@ export async function checkMemberAccess(): Promise<boolean> {
     return true;
   }
 }
+
+/** The DM masks a key to its first 3 and last 2 characters; show just those. */
+export const maskedKeyShort = (masked: string) =>
+  masked.length > 5 ? `${masked.slice(0, 3)}…${masked.slice(-2)}` : masked;
 
 // ponytail: minor units / 100 — wrong for zero-decimal currencies (JPY, KRW);
 // the app sells in USD only, so this never bites today.

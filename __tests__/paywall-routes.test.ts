@@ -3,8 +3,8 @@ import { NextRequest } from "next/server";
 
 /**
  * The /api/paywall route handlers are the only holders of the org-wide
- * Api-Token and the only callers of the platform's link API, so their
- * contracts are load-bearing:
+ * Api-Token, the only writers of the platform's paywall choice and the only
+ * callers of the platform's link API, so their contracts are load-bearing:
  * sign-in-first 401s, a LOUD 500 when PAYWALL_APP_SLUG or IBLAI_API_KEY is
  * missing or still a placeholder (misconfiguration must fail visibly the
  * moment a route is used, never silently grant), the sellable-price allowlist
@@ -12,8 +12,10 @@ import { NextRequest } from "next/server";
  * platform's account in the DM's own shape (a Customer and a session both
  * named after the buyer, on the key owner's path), the return verified before
  * anyone is linked (never someone else's session), a recorded payer's lapse
- * ending the membership, and verbatim DM passthrough (DM 4xx bodies are
- * actionable).
+ * ending the membership, verbatim DM passthrough (DM 4xx bodies are
+ * actionable), and — on the setup route — the admin's OWN token going to the
+ * DM, the Stripe objects created in order, the self-join switch following the
+ * answer, and the choice recorded only after the DM said yes.
  */
 
 const ENV_KEYS = [
@@ -25,6 +27,7 @@ const ENV_KEYS = [
   "PAYWALL_PRICE_IDS",
   "NEXT_PUBLIC_AUTH_URL",
   "IBLAI_APP_BASE_URL",
+  "NEXT_PUBLIC_APP_NAME",
 ] as const;
 
 const saved: Record<string, string | undefined> = {};
@@ -34,10 +37,12 @@ const saved: Record<string, string | undefined> = {};
 const loadAccess = async () => await import("../app/api/paywall/access/route");
 const loadCheckout = async () => await import("../app/api/paywall/checkout/route");
 const loadPrices = async () => await import("../app/api/paywall/prices/route");
+const loadSetup = async () => await import("../app/api/paywall/admin/setup/route");
 
 const DM = "https://api.example.edu/dm";
 const META_URL = `${DM}/api/core/orgs/testorg/metadata/`;
 const LINK_URL = `${DM}/api/core/users/platforms/`;
+const CONFIG_URL = `${DM}/api/core/users/platforms/config/`;
 const SCIM_URL = `${DM}/api/orgs/testorg/scim/v2/Users`;
 const PROVISION_URL = `${DM}/api/core/consolidated-token/provision/`;
 const proxyFor = (username: string) =>
@@ -50,6 +55,7 @@ const BUYER_PROXY = proxyFor("jane");
 let dmCalls: { url: string; init?: RequestInit }[] = [];
 let metaWrites: { headers: Record<string, string>; body: any }[] = [];
 let linkWrites: { headers: Record<string, string>; body: any }[] = [];
+let configWrites: { headers: Record<string, string>; body: any }[] = [];
 let scimWrites: { headers: Record<string, string>; body: any }[] = [];
 let provisionWrites: { headers: Record<string, string>; body: any }[] = [];
 
@@ -67,7 +73,7 @@ const monthly = (over: Record<string, unknown> = {}) => ({
 /**
  * fetch stub: token/verify answers identity (the buyer's token names the
  * buyer, the org-wide key names its owner); the platform metadata URL answers
- * with `apps` (and records PUTs); the link URL records writes;
+ * with `apps` (and records PUTs); the link and self-join URLs record writes;
  * everything else is "the DM" (Stripe proxy). Every stub starts a fresh call
  * log — tests re-stub mid-test.
  */
@@ -75,6 +81,7 @@ const stubFetch = ({
   member = true,
   apps = {} as Record<string, unknown>,
   dm = () => Response.json({}),
+  selfJoin = () => Response.json({ platform_key: "testorg" }),
   // SCIM: the account made for a stranger (id 77, the sent userName echoed).
   scim = (body: any) =>
     Response.json(
@@ -87,12 +94,14 @@ const stubFetch = ({
   member?: boolean;
   apps?: Record<string, unknown>;
   dm?: (url: string, init?: RequestInit) => Response;
+  selfJoin?: () => Response;
   scim?: (body: any) => Response;
   provision?: () => Response;
 } = {}) => {
   dmCalls = [];
   metaWrites = [];
   linkWrites = [];
+  configWrites = [];
   scimWrites = [];
   provisionWrites = [];
   return vi.stubGlobal(
@@ -121,6 +130,10 @@ const stubFetch = ({
       if (url === LINK_URL) {
         linkWrites.push({ headers, body: JSON.parse(init?.body as string) });
         return new Response(null, { status: 201 });
+      }
+      if (url === CONFIG_URL) {
+        configWrites.push({ headers, body: JSON.parse(init?.body as string) });
+        return selfJoin();
       }
       if (url === SCIM_URL) {
         const body = JSON.parse(init?.body as string);
@@ -737,5 +750,193 @@ describe("GET /api/paywall/prices", () => {
     const res = await GET();
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "No Stripe credential configured" });
+  });
+});
+
+describe("POST /api/paywall/admin/setup", () => {
+  const post = (body: unknown, headers: Record<string, string> = {}) =>
+    new NextRequest("http://localhost:3000/api/paywall/admin/setup", {
+      method: "POST",
+      headers: { ...authed, ...headers },
+      body: JSON.stringify(body),
+    });
+  /** The setup route runs on the admin's own path. */
+  const adminDm = (answers: Record<string, (init?: RequestInit) => unknown>) =>
+    stripeDm(
+      Object.fromEntries(Object.entries(answers).map(([k, v]) => [k.replace(" /", " jane:/"), v])),
+    );
+
+  it("401s without a sign-in and validates before any platform call", async () => {
+    stubFetch();
+    const { POST } = await loadSetup();
+    expect((await POST(post({ access: "free" }, { Authorization: "" }))).status).toBe(401);
+    for (const bad of [
+      { access: "weekly" },
+      { access: "monthly" },
+      { access: "one_time", amount: 0 },
+      { access: "monthly", amount: 29.5 },
+    ]) {
+      expect((await POST(post(bad))).status).toBe(400);
+    }
+    expect(dmCalls).toHaveLength(0);
+    expect(configWrites).toHaveLength(0);
+    expect(metaWrites).toHaveLength(0);
+  });
+
+  it("free: opens self-join and records the choice without any Stripe call, even after a paid plan", async () => {
+    stubFetch({
+      apps: { "demo-app": monthly() },
+      // Any proxy call throws: free must never need the platform's Stripe key.
+      dm: adminDm({}),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "free" }, { "Idempotency-Key": "k" }));
+    expect(res.status).toBe(200);
+    expect(dmCalls).toHaveLength(0);
+    expect(configWrites).toEqual([
+      {
+        headers: expect.objectContaining({ Authorization: "Token dm-abc" }),
+        body: { platform_key: "testorg", allow_self_linking: true },
+      },
+    ]);
+    expect(metaWrites).toHaveLength(1);
+    expect(metaWrites[0].headers.Authorization).toBe("Token dm-abc");
+    expect(metaWrites[0].body).toEqual({
+      metadata: {
+        apps: {
+          "demo-app": {
+            version: 1,
+            access: "free",
+            amount: null,
+            currency: null,
+            // The tagged product is kept for a later paid answer.
+            stripe: { product_id: "prod_1", price_id: null },
+            updated_at: expect.any(String),
+            updated_by: "jane",
+          },
+        },
+      },
+    });
+    expect((await res.json()).info.access).toBe("free");
+  });
+
+  it("names the product after the app when NEXT_PUBLIC_APP_NAME is set", async () => {
+    process.env.NEXT_PUBLIC_APP_NAME = "Caveman Coach";
+    stubFetch({
+      dm: adminDm({
+        "POST /products/": () => ({ id: "prod_new" }),
+        "POST /prices/": () => ({ id: "price_new" }),
+      }),
+    });
+    const { POST } = await loadSetup();
+    expect((await POST(post({ access: "monthly", amount: 2900 }))).status).toBe(200);
+    expect(sentBody(0)).toEqual({ name: "Caveman Coach", metadata: { app: "demo-app" } });
+  });
+
+  it("monthly, first time: creates the product (named after the platform, tagged) and a recurring USD price, then closes self-join", async () => {
+    stubFetch({
+      dm: adminDm({
+        "POST /products/": () => ({ id: "prod_new", name: "Acme" }),
+        "POST /prices/": () => ({ id: "price_new" }),
+      }),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "monthly", amount: 2900 }, { "Idempotency-Key": "k" }));
+    expect(res.status).toBe(200);
+    expect(calledPaths()).toEqual(["POST jane:/products/", "POST jane:/prices/"]);
+    expect(sentBody(0)).toEqual({ name: "Acme", metadata: { app: "demo-app" } });
+    expect(sentHeaders(0)["Idempotency-Key"]).toBe("k-product");
+    expect(sentBody(1)).toEqual({
+      product: "prod_new",
+      unit_amount: 2900,
+      currency: "usd",
+      nickname: "Monthly access",
+      recurring: { interval: "month" },
+    });
+    expect(sentHeaders(1)["Idempotency-Key"]).toBe("k-price");
+    expect(configWrites.map((w) => w.body)).toEqual([
+      { platform_key: "testorg", allow_self_linking: false },
+    ]);
+    expect(metaWrites[0].body.metadata.apps["demo-app"]).toMatchObject({
+      access: "monthly",
+      amount: 2900,
+      currency: "usd",
+      stripe: { product_id: "prod_new", price_id: "price_new" },
+    });
+  });
+
+  it("one-time, changing plan: archives the old price, reuses the still-tagged product, no recurring", async () => {
+    stubFetch({
+      apps: { "demo-app": monthly() },
+      dm: adminDm({
+        "POST /prices/price_1/": () => ({ id: "price_1", active: false }),
+        "GET /products/prod_1/": () => ({
+          id: "prod_1",
+          active: true,
+          metadata: { app: "demo-app" },
+        }),
+        "POST /prices/": () => ({ id: "price_2" }),
+      }),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "one_time", amount: 4900 }));
+    expect(res.status).toBe(200);
+    expect(calledPaths()).toEqual([
+      "POST jane:/prices/price_1/",
+      "GET jane:/products/prod_1/",
+      "POST jane:/prices/",
+    ]);
+    expect(sentBody(2)).toEqual({
+      product: "prod_1",
+      unit_amount: 4900,
+      currency: "usd",
+      nickname: "One-time access",
+    });
+    expect(metaWrites[0].body.metadata.apps["demo-app"]).toMatchObject({
+      access: "one_time",
+      amount: 4900,
+      stripe: { product_id: "prod_1", price_id: "price_2" },
+    });
+  });
+
+  it("replaces a product that is gone or no longer tagged", async () => {
+    stubFetch({
+      apps: { "demo-app": monthly({ stripe: { product_id: "prod_old", price_id: null } }) },
+      dm: (url, init) =>
+        url.endsWith("/products/prod_old/")
+          ? Response.json({ detail: "Not found." }, { status: 404 })
+          : Response.json(
+              init?.method === "POST" && url.endsWith("/products/")
+                ? { id: "prod_new" }
+                : { id: "price_new" },
+            ),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "monthly", amount: 100 }));
+    expect(res.status).toBe(200);
+    expect(metaWrites[0].body.metadata.apps["demo-app"].stripe).toEqual({
+      product_id: "prod_new",
+      price_id: "price_new",
+    });
+  });
+
+  it("passes the DM's 403 through (not an admin) and records nothing", async () => {
+    stubFetch({ dm: () => Response.json({ error: "Permission denied" }, { status: 403 }) });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "monthly", amount: 2900 }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Permission denied" });
+    expect(configWrites).toHaveLength(0);
+    expect(metaWrites).toHaveLength(0);
+  });
+
+  it("records nothing when the self-join switch is refused", async () => {
+    stubFetch({
+      selfJoin: () => Response.json({ error: "Permission denied" }, { status: 403 }),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "free" }));
+    expect(res.status).toBe(403);
+    expect(metaWrites).toHaveLength(0);
   });
 });

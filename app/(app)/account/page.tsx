@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Account } from "@iblai/iblai-js/web-containers/next";
 import config from "@/lib/iblai/config";
@@ -50,6 +51,17 @@ export default function AccountPage() {
     // A bounded, full-width white surface: the SDK panel is transparent and
     // needs a definite height for its rail and scrolling content pane.
     <div className="flex min-h-0 flex-1 flex-col bg-white">
+      {isAdmin && (
+        // The way back to the paywall question, deliberately quiet.
+        <div className="flex shrink-0 justify-end px-4 pt-3">
+          <Link
+            href="/setup"
+            className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Payments setup
+          </Link>
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         <Account
           tenant={tenantKey}
