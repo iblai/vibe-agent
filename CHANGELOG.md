@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.3](https://github.com/iblai/vibe-agent/compare/v1.3.2...v1.3.3) (2026-09-07)
+
+### Documentation
+
+* token ladder in step 3, from the OS tab to the OS key modal, never a copy-paste ([7e2e15d](https://github.com/iblai/vibe-agent/commit/7e2e15d04ecb4457a7c0dcbbeef4941fe48206e3))
+
 ## [1.3.2](https://github.com/iblai/vibe-agent/compare/v1.3.1...v1.3.2) (2026-09-07)
 
 ### Documentation
