@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1](https://github.com/iblai/vibe-agent/compare/v1.3.0...v1.3.1) (2026-09-07)
+
+### Bug Fixes
+
+* not taking a picture of stripe page ([b49a497](https://github.com/iblai/vibe-agent/commit/b49a4973f5488c7f70c9b17122a2945be96aeaa5))
+
 ## [1.3.0](https://github.com/iblai/vibe-agent/compare/v1.2.0...v1.3.0) (2026-09-07)
 
 ### Features
