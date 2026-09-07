@@ -2,12 +2,10 @@
 // config.apiKey(); never import from a client component.
 // Relative import (not @/): __tests__ load this module under vitest, which
 // resolves no path alias.
+import { randomBytes } from "node:crypto";
 import config from "./iblai/config";
-import { authLoginUrl } from "./iblai/auth-utils";
 
 export const PAYWALL_APP_SLUG = process.env.PAYWALL_APP_SLUG ?? "";
-/** ibl.ai's $0 sign-up: a Stripe product SKU on the platform's own account (not in DM source). */
-const SIGNUP_SKU = "credits-free-plan";
 
 /**
  * Where the app is reached from outside: IBLAI_APP_BASE_URL when set, else the
@@ -19,22 +17,6 @@ export function appBaseUrl(req: { url: string }): string {
     throw new Error(`IBLAI_APP_BASE_URL must be an absolute http(s) origin, got "${env}"`);
   return env || new URL(req.url).origin;
 }
-
-/**
- * The platform's own sign-up for a stranger: a public $0 Stripe Checkout that
- * creates the account (and a platform of their own), then returns through the
- * Auth SPA, the one place that turns the token the platform appends into a
- * session. The return is the login URL the Sign in button uses, so a new
- * account lands on /paywall the way a sign-in does. Cancel goes there too:
- * the platform allows only localhost, *.iblai.app and a platform's custom
- * domains as redirect hosts, never ibl.ai hosting's *.vercel.app.
- */
-export function signUpUrl(base: string): string {
-  const back = authLoginUrl(base, config.mainTenantKey());
-  const qs = new URLSearchParams({ redirect_url: back, cancel_url: back });
-  return `${config.dmUrl()}/api/service/stripe/checkout/redirect/${SIGNUP_SKU}/?${qs}`;
-}
-
 /**
  * Why the buyer rail cannot run: IBLAI_API_KEY unset or still the template
  * placeholder. "" when fine. Routes answer 500 with it, loudly, the moment
@@ -282,6 +264,9 @@ export type AppPaymentInfo = {
   stripe: { product_id: string | null; price_id: string | null };
   updated_at: string;
   updated_by: string;
+  /** The one agent this app fronts and what it calls itself — the same object, written by the Get and run procedure. */
+  agent_id?: string | null;
+  app_name?: string | null;
 };
 
 export const ACCESS_VALUES: readonly Access[] = ["free", "one_time", "monthly"];
@@ -363,6 +348,8 @@ export type Catalogue = {
   /** The admin has made a choice (or env decides). */
   decided: boolean;
   source: "env" | "metadata" | "none";
+  /** apps.<slug>.app_name, the name the join page and the tab use. */
+  appName: string;
   platformName: string;
   prices: CataloguePrice[];
   settings: { access: Access; amount: number | null } | null;
@@ -373,19 +360,20 @@ export async function resolveCatalogue(): Promise<Catalogue> {
   const env = envPriceIds();
   const { info, platformName } = await readAppPaymentInfo();
   const settings = info ? { access: info.access, amount: info.amount } : null;
+  const names = { appName: String(info?.app_name ?? ""), platformName };
   if (env.length) {
     const prices: CataloguePrice[] = [];
     for (const id of env) prices.push(await fetchPriceDisplay(id));
-    return { paywall: true, decided: true, source: "env", platformName, prices, settings };
+    return { paywall: true, decided: true, source: "env", ...names, prices, settings };
   }
   if (!info)
-    return { paywall: false, decided: false, source: "none", platformName, prices: [], settings };
+    return { paywall: false, decided: false, source: "none", ...names, prices: [], settings };
   if (info.access === "free" || !info.stripe.price_id)
     return {
       paywall: false,
       decided: true,
       source: "metadata",
-      platformName,
+      ...names,
       prices: [],
       settings,
     };
@@ -393,7 +381,7 @@ export async function resolveCatalogue(): Promise<Catalogue> {
     paywall: true,
     decided: true,
     source: "metadata",
-    platformName,
+    ...names,
     prices: [
       {
         id: info.stripe.price_id,
@@ -409,9 +397,9 @@ export async function resolveCatalogue(): Promise<Catalogue> {
 }
 
 // ---------------------------------------------------------------------------
-// Paying to join. The buyer is signed in (an ibl.ai account from ibl.ai/join)
-// but not a member of the platform, so the DM's per-user paywall — which
-// refuses non-members — cannot be asked to sell to them. The app does what
+// Paying to join. The buyer has an ibl.ai account (made here from their
+// email, or their own) but is not a member of the platform, so the DM's
+// per-user paywall — which refuses non-members — cannot be asked to sell to them. The app does what
 // that endpoint does through the platform's generic Stripe proxy (customer,
 // then session, both named after the buyer), and on the way back verifies the
 // session itself and links the buyer with the DM's admin link API. From then
@@ -466,7 +454,12 @@ export async function createCheckout(
         // Literal Stripe placeholder — Stripe substitutes it, the app never does.
         success_url: `${origin}/paywall/return?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/paywall`,
-        metadata: { ibl_username: buyer.username, app: PAYWALL_APP_SLUG },
+        // ibl_user_id: the return path links the buyer without a sign-in.
+        metadata: {
+          ibl_username: buyer.username,
+          ibl_user_id: String(buyer.userId),
+          app: PAYWALL_APP_SLUG,
+        },
       }),
     }),
   );
@@ -495,32 +488,55 @@ async function setMembership(userId: number, active: boolean): Promise<void> {
   );
 }
 
-/**
- * The buyer is back from Stripe: read the session from the platform's own
- * account, make sure it is theirs and paid, make them a member, and have the
- * DM record the payment in its ledger. True once they are in; false while the
- * session is not paid (yet). Someone else's session is refused, so a leaked
- * return URL joins nobody.
- */
-export async function verifyAndJoin(buyer: PaywallUser, sessionId: string): Promise<boolean> {
-  const session = await dmJson(
+/** The session from the platform's own Stripe account, subscription expanded. */
+export async function retrieveSession(sessionId: string): Promise<any> {
+  return dmJson(
     await dmPlatformFetch(
       `/checkout-sessions/${encodeURIComponent(sessionId)}/?expand[]=subscription`,
     ),
   );
-  const metadata = session?.metadata ?? {};
-  if (metadata.ibl_username !== buyer.username || metadata.app !== PAYWALL_APP_SLUG)
-    throw new PaywallUpstreamError(403, { error: "This checkout session is not yours" });
+}
+
+/** Whom a session of this app was minted for, from the metadata the app stamped. */
+export function sessionBuyer(session: any): { userId: number; username: string } | null {
+  const m = session?.metadata ?? {};
+  if (m.app !== PAYWALL_APP_SLUG || !m.ibl_username || !m.ibl_user_id) return null;
+  return { userId: Number(m.ibl_user_id), username: String(m.ibl_username) };
+}
+
+/**
+ * Paid → the buyer named on the session becomes a member and the DM records
+ * the payment in its ledger. True once they are in; false while the session
+ * is not paid (yet). A session of another app is refused. {fallback} names
+ * the buyer for sessions minted before ibl_user_id was stamped.
+ */
+export async function joinFromSession(session: any, fallback?: PaywallUser): Promise<boolean> {
+  const buyer =
+    sessionBuyer(session) ??
+    (fallback && session?.metadata?.app === PAYWALL_APP_SLUG ? fallback : null);
+  if (!buyer)
+    throw new PaywallUpstreamError(403, { error: "This checkout session is not this app's" });
   if (!sessionPaid(session)) return false;
   await setMembership(buyer.userId, true);
   // The ledger: the DM observes the session on the buyer's own path (a member
   // now) and can re-check the subscription later. Bookkeeping never blocks
   // the join.
-  const qs = new URLSearchParams({ app: PAYWALL_APP_SLUG, session_id: sessionId });
+  const qs = new URLSearchParams({ app: PAYWALL_APP_SLUG, session_id: String(session?.id ?? "") });
   await dmPaywallFetch(buyer.username, `/paywall/access/?${qs}`).catch((e: unknown) =>
     console.error("[paywall] ledger update failed:", e),
   );
   return true;
+}
+
+/**
+ * A signed-in buyer is back from Stripe: the session must be theirs (a leaked
+ * return URL joins nobody), then it is verified and joined like any other.
+ */
+export async function verifyAndJoin(buyer: PaywallUser, sessionId: string): Promise<boolean> {
+  const session = await retrieveSession(sessionId);
+  if (session?.metadata?.ibl_username !== buyer.username)
+    throw new PaywallUpstreamError(403, { error: "This checkout session is not yours" });
+  return joinFromSession(session, buyer);
 }
 
 /** Has the DM ever recorded a payment by {username} for this app? (Invited members have none.) */
@@ -539,3 +555,110 @@ export async function liveAccess(username: string): Promise<{ has_access: boolea
 
 /** A payer's subscription lapsed: their membership ends. */
 export const endMembership = (userId: number) => setMembership(userId, false);
+
+// ---------------------------------------------------------------------------
+// Accounts for strangers. The DM's paywall ledger recognises a payment only by
+// the username stamped on the Checkout Session when it is minted, so a buyer's
+// account exists before Stripe: created through the platform's SCIM endpoint
+// with the app's key — no password, no platform link yet (membership comes
+// with the payment). Sign-in afterwards is the platform's business: provision
+// (tokens minted for the key, when ibl.ai has enabled it) or an email code.
+// ---------------------------------------------------------------------------
+
+const scimUrl = () => `${config.dmUrl()}/api/orgs/${config.mainTenantKey()}/scim/v2/Users`;
+
+/** The DM's own SSO derivation: a short local part plus a random suffix. */
+function scimUsername(email: string): string {
+  const local =
+    email
+      .split("@")[0]
+      .replace(/[^a-zA-Z0-9_]/g, "")
+      .slice(0, 20) || "user";
+  return `${local}_${randomBytes(3).toString("hex")}`;
+}
+
+async function scimCreate(email: string, userName: string): Promise<any> {
+  const res = await fetch(scimUrl(), {
+    method: "POST",
+    headers: { Authorization: apiTokenHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      userName,
+      name: { formatted: email.split("@")[0] },
+      emails: [{ value: email, primary: true }],
+      active: true,
+    }),
+    cache: "no-store",
+  });
+  const body = await res.json().catch(() => null);
+  // A fresh username with an email the platform already knows answers 400
+  // ("Username mismatch"): that person has an account and signs in instead.
+  if (res.status === 400 || res.status === 409)
+    throw new PaywallUpstreamError(409, {
+      error: "This email already has an ibl.ai account. Sign in to continue.",
+    });
+  if (!res.ok)
+    throw new PaywallUpstreamError(res.status, body ?? { error: `DM responded ${res.status}` });
+  return body;
+}
+
+/** The ibl.ai user for {email}: created now (no password, no membership). */
+export async function ensureUser(email: string): Promise<PaywallUser> {
+  // ponytail: a suffix collision makes SCIM answer 200 with someone else's
+  // account, so the answer's email is checked and one more suffix is tried.
+  for (let attempt = 0; ; attempt++) {
+    const userName = scimUsername(email);
+    const user = await scimCreate(email, userName);
+    const emails: string[] = (user?.emails ?? []).map((e: any) =>
+      String(e?.value ?? "").toLowerCase(),
+    );
+    if (emails.length === 0 || emails.includes(email.toLowerCase()))
+      return { userId: Number(user?.id ?? 0), username: String(user?.userName ?? userName), email };
+    if (attempt >= 1)
+      throw new PaywallUpstreamError(502, { error: "Could not create an account for this email" });
+  }
+}
+
+/** The Auth SPA's `data=` shape: what SsoLogin stores, key for key. */
+export type ProvisionedSession = {
+  axd_token: string;
+  axd_token_expires: string;
+  dm_token: string;
+  dm_token_expires: string;
+  edx_jwt_token: string;
+  userData: string;
+  tenant: string;
+  current_tenant: string;
+};
+
+/**
+ * Tokens for a buyer who just became a member, minted by the platform for the
+ * app's key (consolidated-token/provision). null while ibl.ai has not enabled
+ * provisioning for this platform (404): the buyer signs in by email code then.
+ */
+export async function provisionTokens(buyer: PaywallUser): Promise<ProvisionedSession | null> {
+  const key = config.mainTenantKey();
+  const res = await fetch(`${config.dmUrl()}/api/core/consolidated-token/provision/`, {
+    method: "POST",
+    headers: { Authorization: apiTokenHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ username: buyer.username, email: buyer.email, platform_key: key }),
+    cache: "no-store",
+  });
+  if (res.status === 404) {
+    console.info("[paywall] provisioning is off for this platform; the buyer signs in by email");
+    return null;
+  }
+  const data = (await dmJson(res))?.data;
+  if (!data?.dm_token?.token)
+    throw new PaywallUpstreamError(502, { error: "provision returned no tokens" });
+  return {
+    axd_token: String(data.axd_token?.token ?? ""),
+    axd_token_expires: String(data.axd_token?.expires ?? ""),
+    dm_token: String(data.dm_token.token),
+    dm_token_expires: String(data.dm_token.expires ?? ""),
+    edx_jwt_token: String(data.edx_jwt_token?.token ?? ""),
+    userData: JSON.stringify(data.user ?? {}),
+    tenant: key,
+    current_tenant: JSON.stringify({ key }),
+  };
+}

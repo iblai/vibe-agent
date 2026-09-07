@@ -131,7 +131,7 @@ describe("resolveUser identity cache", () => {
   });
 });
 
-describe("appBaseUrl / signUpUrl", () => {
+describe("appBaseUrl", () => {
   const req = { url: "http://localhost:3000/api/paywall/prices" };
 
   it("is the request's origin unless IBLAI_APP_BASE_URL says otherwise", async () => {
@@ -142,19 +142,122 @@ describe("appBaseUrl / signUpUrl", () => {
     process.env.IBLAI_APP_BASE_URL = "agent.example.com";
     expect(() => appBaseUrl(req)).toThrow(/IBLAI_APP_BASE_URL/);
   });
+});
 
-  it("sends a stranger to the platform's $0 checkout, back through the Auth SPA's login", async () => {
-    const { signUpUrl } = await loadPaywall();
-    const url = new URL(signUpUrl("http://localhost:3000"));
-    expect(url.origin + url.pathname).toBe(
-      "https://api.example.edu/dm/api/service/stripe/checkout/redirect/credits-free-plan/",
+describe("ensureUser", () => {
+  const scimUrl = "https://api.example.edu/dm/api/orgs/testorg/scim/v2/Users";
+  const created = (body: any, over: Record<string, unknown> = {}) =>
+    Response.json(
+      { id: "77", userName: body.userName, emails: body.emails, ...over },
+      { status: 201 },
     );
-    // Encoded once: the Auth SPA sees the login URL the Sign in button builds.
-    const back =
-      "https://login.iblai.app/login?app=custom&redirect-to=http://localhost:3000&tenant=testorg";
-    expect(url.searchParams.get("redirect_url")).toBe(back);
-    // Cancel lands on the sign-in page: the DM refuses *.vercel.app as a redirect host.
-    expect(url.searchParams.get("cancel_url")).toBe(back);
+
+  it("creates the account through SCIM with the app's key and no platform link", async () => {
+    const mock = stubFetch((_url, init) => created(JSON.parse(init?.body as string)));
+    const { ensureUser } = await loadPaywall();
+    const user = await ensureUser("new.buyer@x.io");
+    expect(user).toEqual({
+      userId: 77,
+      username: expect.stringMatching(/^newbuyer_[0-9a-f]{6}$/),
+      email: "new.buyer@x.io",
+    });
+    const [url, init] = mock.mock.calls[0];
+    expect(url).toBe(scimUrl);
+    expect(((init?.headers ?? {}) as Record<string, string>).Authorization).toBe(
+      "Api-Token platform-key",
+    );
+    const body = JSON.parse(init?.body as string);
+    expect(body.platformOrgs).toBeUndefined();
+    expect(body.emails).toEqual([{ value: "new.buyer@x.io", primary: true }]);
+  });
+
+  it("tries one more suffix when SCIM hands back someone else's account, then gives up loudly", async () => {
+    const seen: string[] = [];
+    const mock = stubFetch((_url, init) => {
+      const body = JSON.parse(init?.body as string);
+      seen.push(body.userName);
+      return seen.length === 1
+        ? created(body, { emails: [{ value: "someone.else@x.io", primary: true }] })
+        : created(body);
+    });
+    const { ensureUser, PaywallUpstreamError } = await loadPaywall();
+    expect((await ensureUser("new.buyer@x.io")).username).toBe(seen[1]);
+    expect(mock).toHaveBeenCalledTimes(2);
+    expect(seen[0]).not.toBe(seen[1]);
+
+    vi.resetModules();
+    stubFetch((_url, init) =>
+      created(JSON.parse(init?.body as string), { emails: [{ value: "someone.else@x.io" }] }),
+    );
+    const fresh = await loadPaywall();
+    await expect(fresh.ensureUser("new.buyer@x.io")).rejects.toBeInstanceOf(
+      fresh.PaywallUpstreamError,
+    );
+    expect(PaywallUpstreamError).toBeDefined();
+  });
+
+  it("turns the platform's 'username mismatch' 400 (a known email) into a 409 that says to sign in", async () => {
+    stubFetch(() =>
+      Response.json({ error: "Username mismatch in error response" }, { status: 400 }),
+    );
+    const { ensureUser } = await loadPaywall();
+    const err = await ensureUser("known@x.io").catch((e) => e);
+    expect(err.status).toBe(409);
+    expect(err.body.error).toContain("Sign in");
+  });
+});
+
+describe("provisionTokens", () => {
+  const buyer = { userId: 77, username: "newbuyer_abc123", email: "new.buyer@x.io" };
+
+  it("is null (and says so once) while ibl.ai has not enabled provisioning for the platform", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    stubFetch(() => Response.json({ detail: "Not found." }, { status: 404 }));
+    const { provisionTokens } = await loadPaywall();
+    expect(await provisionTokens(buyer)).toBeNull();
+    expect(info).toHaveBeenCalledTimes(1);
+    info.mockRestore();
+  });
+
+  it("maps the platform's bundle to the Auth SPA's data shape", async () => {
+    const mock = stubFetch(() =>
+      Response.json({
+        data: {
+          user: { user_id: 77, user_nicename: "newbuyer_abc123", user_email: "new.buyer@x.io" },
+          axd_token: { token: "axd-1", expires: "2030-01-01T00:00:00Z" },
+          dm_token: { token: "dm-1", expires: "2030-01-02T00:00:00Z" },
+          edx_jwt_token: { token: "jwt-1", expires: "2030-01-03T00:00:00Z" },
+        },
+      }),
+    );
+    const { provisionTokens } = await loadPaywall();
+    expect(await provisionTokens(buyer)).toEqual({
+      axd_token: "axd-1",
+      axd_token_expires: "2030-01-01T00:00:00Z",
+      dm_token: "dm-1",
+      dm_token_expires: "2030-01-02T00:00:00Z",
+      edx_jwt_token: "jwt-1",
+      userData: JSON.stringify({
+        user_id: 77,
+        user_nicename: "newbuyer_abc123",
+        user_email: "new.buyer@x.io",
+      }),
+      tenant: "testorg",
+      current_tenant: JSON.stringify({ key: "testorg" }),
+    });
+    const [url, init] = mock.mock.calls[0];
+    expect(url).toBe("https://api.example.edu/dm/api/core/consolidated-token/provision/");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      username: "newbuyer_abc123",
+      email: "new.buyer@x.io",
+      platform_key: "testorg",
+    });
+  });
+
+  it("passes any other refusal through", async () => {
+    stubFetch(() => Response.json({ detail: "Invalid Request" }, { status: 403 }));
+    const { provisionTokens, PaywallUpstreamError } = await loadPaywall();
+    await expect(provisionTokens(buyer)).rejects.toBeInstanceOf(PaywallUpstreamError);
   });
 });
 

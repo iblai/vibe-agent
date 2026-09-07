@@ -20,7 +20,8 @@ export default function AboutPage() {
   if (!mentorId) {
     return (
       <p role="alert" className="p-8 text-sm text-destructive">
-        NEXT_PUBLIC_DEFAULT_AGENT_ID is not set. Add the agent’s uuid to .env.local (see README).
+        No agent is configured. The platform’s public metadata needs apps.vibe-agent.agent_id (the
+        Get and run procedure in AGENTS.md writes it).
       </p>
     );
   }

@@ -3,9 +3,16 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
+import {
+  authLoginUrl,
+  hasLiveDmToken,
+  redirectToAuthSpa,
+  saveReturnPath,
+} from "@/lib/iblai/auth-utils";
+import { resolveAppTenant } from "@/lib/iblai/tenant";
 import { LoadingScreen } from "@/components/loading-screen";
 import {
+  BUYER_EMAIL_KEY,
   PaywallRequestError,
   errorMessage,
   paywallFetch,
@@ -20,8 +27,9 @@ type State = { kind: "checking" } | { kind: "signin" } | { kind: "failed"; messa
 const linkClass = "text-sm text-primary underline-offset-4 hover:underline";
 
 // Back from Stripe. The server reads the session from the platform's own
-// account, checks it is this buyer's and paid, and makes them a member; a
-// payment can take a moment to settle, so keep asking for up to a minute.
+// account, checks it is paid (and this buyer's, when signed in), makes them a
+// member and, for a stranger, mints their tokens when the platform allows it;
+// a payment can take a moment to settle, so keep asking for up to a minute.
 function ReturnInner() {
   const sessionId = useSearchParams().get("session_id") ?? "";
   const [state, setState] = useState<State>({ kind: "checking" });
@@ -32,14 +40,29 @@ function ReturnInner() {
     let cancelled = false;
     const deadline = Date.now() + DEADLINE_MS;
     let lastError = "We couldn't confirm your payment yet.";
+    const email = sessionStorage.getItem(BUYER_EMAIL_KEY) ?? "";
+    const qs = new URLSearchParams({ session_id: sessionId, ...(email && { email }) });
     const tick = async () => {
       try {
-        const { joined } = await paywallFetch<AccessView>(
-          `/api/paywall/access?session_id=${encodeURIComponent(sessionId)}`,
-        );
+        const { joined, session } = await paywallFetch<AccessView>(`/api/paywall/access?${qs}`);
         if (joined) {
-          // A full load: the SDK re-reads the platform list and finds the new membership.
-          window.location.assign("/");
+          sessionStorage.removeItem(BUYER_EMAIL_KEY);
+          // A full load into the app: the SDK re-reads the platform list and
+          // finds the new membership.
+          saveReturnPath("/");
+          if (session) {
+            // The platform minted the buyer's tokens: finish the sign-in here,
+            // the way the Auth SPA would.
+            const data = encodeURIComponent(JSON.stringify(session));
+            window.location.assign(`/sso-login-complete?data=${data}`);
+          } else if (hasLiveDmToken()) {
+            window.location.assign("/");
+          } else if (email) {
+            // The platform mails this address a sign-in code.
+            window.location.assign(authLoginUrl(window.location.origin, resolveAppTenant(), email));
+          } else if (!cancelled) {
+            setState({ kind: "signin" });
+          }
           return;
         }
       } catch (e) {
@@ -62,8 +85,6 @@ function ReturnInner() {
   const shown: State = sessionId
     ? state
     : { kind: "failed", message: "No checkout session in the URL." };
-  const returnPath = `/paywall/return?session_id=${encodeURIComponent(sessionId)}`;
-
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       {shown.kind === "checking" ? (
@@ -71,11 +92,11 @@ function ReturnInner() {
       ) : shown.kind === "signin" ? (
         <div className="space-y-3 text-center">
           <p className="text-sm text-foreground">
-            Sign in with the account you paid with to finish joining.
+            You&apos;re in. Sign in with the email you paid with to open the app.
           </p>
           <button
             type="button"
-            onClick={() => void redirectToAuthSpa(returnPath, undefined, false, true)}
+            onClick={() => void redirectToAuthSpa("/", undefined, false, true)}
             className={linkClass}
           >
             Sign in

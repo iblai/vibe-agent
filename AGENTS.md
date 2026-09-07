@@ -12,62 +12,91 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 This project is built on the ibl.ai platform using the `@iblai/iblai-js` SDK.
 
-## Run the server
+## Get and run
 
-When someone asks to run, start, launch, boot or serve this app — "run the
-server", "start it", "get it running locally", or "clone
-https://github.com/iblai/vibe-agent and start the server" — do the steps
-below in this order, and ask before touching anything. If the repo is not
-cloned yet, `git clone https://github.com/iblai/vibe-agent` first and work
-inside it; this section is the procedure.
+When someone asks to get, clone, run, start, launch, boot, serve or publish
+this app — "get github.com/iblai/vibe-agent", "run the server", "start it",
+"publish it" — do the steps below in this order. If the repo is not cloned
+yet, `git clone https://github.com/iblai/vibe-agent` first and work inside
+it; this section is the procedure. It is written for a Claude that controls
+a browser; where it cannot, each browser step says what the person does
+instead. Never enter credentials for the person, never print `.env.local`,
+`iblai.env` or a token, and never ask for a key or token in chat.
 
-1. **Ask whether they are a platform admin on ibl.ai.** The app fronts one
-   ibl.ai platform, and its admin is the one who configures it (the agent,
-   the paywall). If they are not, or are not sure: signing up at
-   https://ibl.ai/join creates an account and a platform with them as its
-   admin — whoever created a platform is its admin. Wait for that before
-   asking anything else. Their platforms are listed on
-   https://login.iblai.app/me.
-2. **Ask for the platform key and the agent uuid, in one message.** The
-   platform key is the platform's name as listed on
-   https://login.iblai.app/me. The agent uuid is the last path segment of
-   the agent's URL on os.ibl.ai,
-   `https://os.ibl.ai/platform/<platform-key>/<agent-uuid>`; pasting that
-   URL answers both. Never invent either: the app refuses placeholders
-   (`main`, `your-platform`…) on purpose. Never ask for the Platform API
-   Token or any other secret. This is the one place this repo asks for the
-   platform key directly; the vibe skills route it through `iblai.env`
-   instead.
-3. **Check the key before writing anything.**
-   `curl -fsS https://api.iblai.app/dm/api/core/orgs/<platform-key>/metadata/`
-   is a public read: 200 means the platform exists, 404 ("Platform not
-   found") means a typo or a platform they do not have — ask again.
-4. **Write the env files from their templates**, changing nothing else in
-   them: `cp iblai.env.example iblai.env` and set `PLATFORM=<platform-key>`
-   (leave `TOKEN` as it is); `cp .env.example .env.local` and set
-   `NEXT_PUBLIC_MAIN_TENANT_KEY=<platform-key>`,
-   `NEXT_PUBLIC_DEFAULT_AGENT_ID=<agent-uuid>` and `IBLAI_API_KEY=` (empty,
-   not the `your-token` placeholder); `NEXT_PUBLIC_APP_NAME=<what they call
-the app>` if they said, else leave it empty (the join page then says
-   "Join this app"). `IBLAI_APP_BASE_URL` stays empty (the app uses the
-   origin it is reached on) and `PAYWALL_APP_SLUG` stays `vibe-agent`. Both
-   files are gitignored; never print them back.
-5. **Ask them to paste the Platform API Token** into `.env.local` as
-   `IBLAI_API_KEY`, with an editor, never through the chat (it is minted by
-   `/iblai-api-login` from the `iblai/api` skills, or is an org secret). The
-   app checks the key against the platform and renders nothing but an alert
-   until a valid one for this platform is there. Wait for them to say it is
-   done.
+1. **Sign the creator in.** Open https://login.iblai.app/me. A sign-in
+   screen means they are not signed in: no ibl.ai account or no platform of
+   their own → open https://ibl.ai/join (ibl.ai's own $0 sign-up: it creates
+   the account and a platform with them as admin, and leaves them signed
+   in); returning → let them sign in. Wait for them, then re-navigate to
+   `/me` (the platform redirects elsewhere after a login). Without a
+   browser: send them those links and ask them to say when they are in.
+2. **Read the platform off `/me`.** The page lists the account's username
+   and every platform with its key. One platform → take it; several → ask
+   which. Check it: `curl -fsS https://api.iblai.app/dm/api/core/orgs/<key>/metadata/`
+   is a public read, 200 means it exists, 404 means a typo. Without a
+   browser: ask for the key as listed on `/me`.
+3. **Mint the Platform API Token, at once, and put it in env.** From the
+   `login.iblai.app` tab read `localStorage.getItem("dm_token")` (the
+   extension's `javascript_tool`), then
+   `POST https://api.iblai.app/dm/api/core/platform/api-tokens/` with
+   `Authorization: Token <dm_token>` and
+   `{"username": "<username>", "name": "vibe-agent", "key": "", "platform_key": "<key>", "created": "<ISO now>", "expires": ""}`;
+   the answer's `key` is the token, shown once. `(platform_key, name)` is
+   unique: on a 400 use `vibe-agent-2`; on 401/403 the session is scoped to
+   another platform — have them switch to the right one in os.ibl.ai (org
+   dropdown) and read `dm_token` again. Write the env files from their
+   templates, changing nothing else: `cp .env.example .env.local` with
+   `NEXT_PUBLIC_MAIN_TENANT_KEY=<key>` and `IBLAI_API_KEY=<token>`;
+   `cp iblai.env.example iblai.env` with `PLATFORM=<key>` and
+   `TOKEN=<token>`. `PAYWALL_APP_SLUG` stays `vibe-agent`. Steps 1–3 are
+   one motion for a new creator: register, and the key and token are in
+   env. Without a browser: they create a token themselves (os.ibl.ai → any
+   agent → Edit → API → Create API key) and put it in both files with an
+   editor; wait for them to say it is done.
+4. **The agent and the app's name.** With the token, list the platform's
+   agents: `GET https://api.iblai.app/dm/api/search/orgs/<key>/users/<username>/mentors/`
+   (`Authorization: Api-Token $IBLAI_API_KEY`, the value read from
+   `.env.local` in the shell, never echoed). One → use it; several → ask
+   which; none → ask for a name and one line on what it does, and create it:
+   `POST https://api.iblai.app/dm/api/ai-mentor/orgs/<key>/users/<username>/mentor-with-settings/`
+   with `{"template_name": "ai-mentor", "new_mentor_name": "<name>", "display_name": "<name>", "system_prompt": "<line>"}`;
+   the answer's `unique_id` is the agent. Ask what they call the app; the
+   agent's name is the default.
+5. **Save the app's configuration on the platform.** It lives in the
+   platform's public metadata, not in env:
+   `PUT https://api.iblai.app/dm/api/core/orgs/<key>/metadata/` with the
+   `Api-Token` header and
+   `{"metadata": {"apps": {"vibe-agent": {"agent_id": "<unique_id>", "app_name": "<name>"}}}}`
+   (the platform deep-merges; the paywall choice under the same object is
+   untouched). Confirm with the public GET: `metadata.apps["vibe-agent"].agent_id`.
 6. **Install and start.** Node 20 or newer (22 recommended) and pnpm 11
-   (`corepack enable`, or `npm i -g pnpm`); then `pnpm install --ignore-scripts`,
+   (`corepack enable`, or `npm i -g pnpm`); `pnpm install --ignore-scripts`,
    `pnpm husky` (the commit hook), and, with port 3000 free
    (`ss -ltnp 'sport = :3000'`), `pnpm dev` in the background. Wait for
-   "Ready", then tell them the URL, http://localhost:3000, and that they sign
-   in there with their ibl.ai account; as the platform admin they land on
-   the one setup question first (free access needs no Stripe key). Do not
-   open a browser for them.
-7. **Say once what is left.** http://localhost:3000 must be among the
-   platform's allowed redirect origins, or sign-in never comes back.
+   "Ready", then open http://localhost:3000 in the browser: they sign in
+   with the session they already have and land on `/setup`, the one setup
+   question. Without a browser: tell them the URL.
+7. **Payments.** `GET https://api.iblai.app/dm/api/ai-account/orgs/<key>/masked-integration-credential/`
+   with the `Api-Token` header says whether the platform has a `stripe`
+   credential. Without one, and if they want to charge: on `/setup` pick a
+   paid answer so the Monetize screen shows, and ask them to type their
+   restricted Stripe key there themselves (the browser saves it to the
+   platform; you never see it). Then ask, in chat, free, one-time or
+   monthly, and the USD price, and set it:
+   `POST http://localhost:3000/api/paywall/admin/setup` with
+   `{"access": "free"|"one_time"|"monthly", "amount": <cents or null>}`,
+   `Authorization: Token <dm_token>` (the app's own session on the
+   localhost tab, or the login tab's) and an `Idempotency-Key`; confirm
+   with `GET http://localhost:3000/api/paywall/prices`. Free needs no
+   Stripe key at all.
+8. **Preview.** Reload http://localhost:3000/ and check the agent answers.
+9. **Offer to publish** on our hosting. Ask the name they want
+   (`<name>.vercel.app`: lowercase letters, digits, hyphens), set
+   `package.json` `name` to it (the deploy skill's slug source), run
+   `/iblai-vibe-ops-deploy`, and report the URL it returns (Vercel may
+   alter a long or taken name). Say once what is left: the deployed origin
+   among the platform's allowed redirect origins; `tauri.conf.json` is
+   updated by the skill.
 
 ## Component Priority
 
@@ -208,8 +237,9 @@ of users:
   pinned platform in `localStorage.tenants`), never the SDK `useIsAdmin()`.
 - **Members** chat on `/`. Membership is the entitlement: a signed-in user the
   platform does not know pays on `/paywall` (when the admin chose a fee) and is
-  linked as a member; a visitor without an account is sent to
-  https://ibl.ai/join first. Nobody who is a member ever sees a payment page.
+  linked as a member; a visitor without an account types their email on
+  `/paywall`, an account is made for it, and they pay on the same page — one
+  Stripe page, no sign-up. Nobody who is a member ever sees a payment page.
 
 ### Map
 
@@ -217,10 +247,10 @@ of users:
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app/(app)/`                                                             | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels) live here.                                                                                                                                  |
 | `app/(app)/(paid)/`                                                      | No gate (whoever is signed in here is a member): `/` (SDK `Chat`) and `/analytics/*` — the SDK `AnalyticsLayout` tab strip over eight pages (Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports), Admin mode only.                                                                              |
-| `app/paywall/`                                                           | The join page (public), Stripe Checkout hand-off, return page. Outside `(app)` on purpose: it must render for people the platform does not know yet.                                                                                                                                                                  |
+| `app/paywall/`                                                           | The join page (public; an email field for strangers), Stripe Checkout hand-off, return page (links the buyer and finishes their sign-in). Outside `(app)` on purpose: it must render for people the platform does not know yet.                                                                                       |
 | `app/setup/`                                                             | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                 |
 | `app/sso-login-complete/`                                                | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                   |
-| `app/api/paywall/{access,checkout,prices}/`                              | Buyer rail: the server calls the platform with `IBLAI_API_KEY` — as the platform (the key owner's path) to mint the checkout, verify the session and link the buyer; as the buyer for the ledger. `prices` is public and also carries the sign-up URL (`signUpUrl`).                                                  |
+| `app/api/paywall/{access,checkout,prices}/`                              | Buyer rail: the server calls the platform with `IBLAI_API_KEY` — as the platform (the key owner's path) to mint the checkout, verify the session and link the buyer; as the buyer for the ledger. `prices` is public and carries the app's name from the platform's metadata.                                         |
 | `app/api/paywall/admin/setup/`                                           | Admin rail: one route that, for a paid answer, retires the old price, ensures the tagged product and creates the price, then records the choice — forwarding the admin's own DM token. Free records the choice only: zero Stripe calls, so it never needs a key.                                                      |
 | `lib/paywall.ts`, `lib/paywall-admin.ts`                                 | Server-only paywall code, including the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                |
 | `lib/paywall-client.ts`, `components/setup/`, `components/plan-card.tsx` | Browser side: the token header, the setup and standing checks, the setup screen, the plan card.                                                                                                                                                                                                                       |
@@ -236,8 +266,22 @@ of users:
 - The platform comes from `NEXT_PUBLIC_MAIN_TENANT_KEY` only (`resolveAppTenant()`).
   No localStorage fallback: every vibe app on localhost writes `app_tenant`, and it
   silently overrode env. A missing or placeholder key renders an alert.
-- The agent is `NEXT_PUBLIC_DEFAULT_AGENT_ID`. Never invent one; ask for the
+- The agent and the app's name are not env. They are `apps.<slug>.agent_id`
+  and `apps.<slug>.app_name` in the platform's public metadata, written by the
+  Get and run procedure (or any admin), read by the root layout once per
+  request and handed to the browser as `window.__ENV__` — the runtime layer
+  `config.defaultAgentId()` / `config.appName()` already read first. Never
+  invent an agent: list the platform's, or ask for the
   `os.ibl.ai/platform/<platform-key>/<uuid>` URL.
+- Accounts for strangers are made by the buyer rail through the platform's
+  SCIM endpoint, before Stripe, because the ledger recognises a payment only
+  by the username stamped on the session at mint; membership comes with the
+  payment, never before. A stranger's sign-in afterwards is the platform's:
+  tokens minted for the key (`consolidated-token/provision`, only where
+  ibl.ai enabled it) or an email code from the login SPA.
+- The Platform API Token is minted only from the creator's own browser
+  session by the procedure (or by the creator in the OS) and lives in env as
+  `IBLAI_API_KEY`; the app never creates, stores or shows one.
 - The SDK `<Chat>` must never remount except through its `key` (any other remount
   wedges voice input), and `reactStrictMode` stays `false` for the same SDK bug.
 - No static export, ever: the paywall needs the server routes. Native apps are a
@@ -296,13 +340,14 @@ is by definition not one yet. So `createCheckout` does what that endpoint
 does, through the generic Stripe proxy: a Customer with
 `metadata.ibl_username`, a session with `metadata: {ibl_username, app}` —
 the shape the platform's access check and ledger recognise afterwards.
-`verifyAndJoin` retrieves the session (`expand[]=subscription`), refuses one
-whose `ibl_username` is not the signed-in buyer (a leaked return URL joins
-nobody), requires `status: complete` and `payment_status: paid` (or a live
-subscription), links the buyer with `POST /api/core/users/platforms/`
-`{user_id, platform_key, active}` (the key is an admin credential), then
-calls `paywall/access/?session_id=` as the buyer so the platform records the
-payment. Nothing is a webhook: the platform's paywall is verified polling by
+The session also carries `ibl_user_id`, so the return path needs no sign-in:
+`retrieveSession` (`expand[]=subscription`) and `joinFromSession` read the
+buyer off the session's own metadata, require `status: complete` and
+`payment_status: paid` (or a live subscription), link them with
+`POST /api/core/users/platforms/` `{user_id, platform_key, active}` (the key
+is an admin credential), then call `paywall/access/?session_id=` as the buyer
+so the platform records the payment. A signed-in buyer's session must still
+be theirs (`verifyAndJoin`; a leaked return URL joins nobody new). Nothing is a webhook: the platform's paywall is verified polling by
 design (BYO keys). A lapse is caught on the payer's next visit — the shell
 asks `/api/paywall/access` once per minute per session: `paywall/payments/?username=`
 says whether they ever paid (invited members and admins never did, so they
@@ -314,28 +359,32 @@ sends a user whose `localStorage.tenants` lacks the pinned key to `/paywall`
 when the platform is paid (one public read of `/api/paywall/prices`, cached
 for the page) and to the login SPA otherwise (`paywallEntry` in
 `lib/iblai/tenant.ts`). `/paywall` and `/paywall/return` are in
-`PUBLIC_ROUTES` and skip the `TenantProvider`. Sign-in returns them to
-`/paywall` (`redirectTo` in localStorage).
+`PUBLIC_ROUTES` and skip the `TenantProvider`. The page's Sign in returns to
+`/` (`redirectTo` in localStorage); a non-member lands on `/paywall` again
+through the providers.
 
-A visitor without an account takes the platform's own $0 sign-up from the
-page's Create Account button (`signUpUrl()` in `lib/paywall.ts`, delivered by
-the public `prices` route): the DM's
-`…/api/service/stripe/checkout/redirect/credits-free-plan/` 302s to a Stripe
-Checkout that asks for an email only, creates the account and a platform of
-their own, and returns to its `redirect_url` with an `edx_jwt_token` appended.
-That `redirect_url` is the Auth SPA login URL the Sign in button already uses
-(`authLoginUrl()` in `lib/iblai/auth-utils.ts`), because only the SPA turns
-that token into a session (its `/login` page; nothing in the SDK reads it off
-a URL); the SPA comes back to `/sso-login-complete`, which goes to the
-`redirectTo` the page saved on click, `/paywall`, now signed in with the Buy
-button showing. Cancel goes to that same login URL: the DM allows only
-localhost, `*.iblai.app` and a platform's mirrored custom domains as redirect
-hosts, never ibl.ai hosting's `*.vercel.app`, so `/paywall` itself cannot be
-the cancel URL. The origin in those URLs, and in a purchase's Stripe return
-URLs, is `appBaseUrl()`: `IBLAI_APP_BASE_URL` when set, else the origin the
-request arrived on. The OS and the LMS do not use this flow: they send
-strangers to the SPA's `/join`, which self-joins them — closed on a paid
-platform.
+A visitor without an account types their email on the join page and pays on
+the same Stripe page. `POST /api/paywall/checkout` without a sign-in takes
+`{price_id, email}`: `ensureUser()` creates the ibl.ai account through the
+platform's SCIM endpoint (`POST /api/orgs/<key>/scim/v2/Users`, the app's key;
+a derived username `<local part>_<6 hex>`, the email, no password, no
+`platformOrgs` — so no membership yet), then mints the checkout for that
+username as for anyone else. An email the platform already knows makes SCIM
+answer 400 ("username mismatch"), which the route turns into 409 "sign in
+first"; a non-member's existing email cannot be looked up with the key. Back
+on `/paywall/return`, the page sends the email it kept in `sessionStorage`
+(`paywall_email`) along with the session id; the server links the buyer from
+the session's metadata and, when that email is the one that paid
+(`customer_details.email`), asks the platform to mint the buyer's tokens
+(`provisionTokens`). Where ibl.ai has enabled provisioning for the platform
+the answer is the login SPA's `data=` shape and the page finishes the sign-in
+through the app's own `/sso-login-complete`; where it is off (404) the page
+sends them to the SPA's `/login?email=…`, which mails a sign-in code, and the
+SPA lands them on `/` (`redirectTo`). Either way they land in the app, never
+on `/paywall`: the SPA's return carries no platform list, so only a page
+under the `TenantProvider` can see the new membership. The OS and the LMS do
+not use any of this: they send strangers to the SPA's `/join`, which
+self-joins them — closed on a paid platform.
 
 The platform's Stripe proxy (`…/providers/stripe/payments/*`) is admin-only
 for every verb and answers 403 otherwise, and so are the platform-metadata
@@ -386,17 +435,19 @@ setup order, `app/api/paywall/admin/setup/route.ts`; the question's copy,
 | Key                                                            | Server-only | When missing                                                                                                                                                                                                             |
 | -------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_MAIN_TENANT_KEY`                                  | no          | an alert instead of the app                                                                                                                                                                                              |
-| `NEXT_PUBLIC_DEFAULT_AGENT_ID`                                 | no          | alerts on `/`, `/analytics`, `/about`                                                                                                                                                                                    |
 | `IBLAI_API_KEY`                                                | yes         | an alert instead of the app: the root layout refuses to render while the key is empty, a placeholder, rejected by the platform or another platform's (one config read, cached 5 min); the buyer routes 500 naming it too |
 | `PAYWALL_APP_SLUG`                                             | yes         | every paywall route 500s, loudly, by design                                                                                                                                                                              |
 | `PAYWALL_PRICE_IDS`                                            | yes         | optional override of the recorded choice                                                                                                                                                                                 |
-| `NEXT_PUBLIC_APP_NAME`                                         | no          | "this app" on the join page, "vibe-agent" as the tab title                                                                                                                                                               |
 | `IBLAI_APP_BASE_URL`                                           | yes         | the origin each request arrives on (right on localhost and on ibl.ai hosting); a set but malformed value 500s the paywall routes naming it                                                                               |
 | `NEXT_PUBLIC_SHOW_ABOUT`                                       | no          | About hidden (the default)                                                                                                                                                                                               |
 | `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_TAURI_CUSTOM_SCHEME` | no          | code defaults                                                                                                                                                                                                            |
 
+The agent (`agent_id`) and the app's name (`app_name`) live in the platform's
+public metadata under `apps.<PAYWALL_APP_SLUG>`, next to the paywall choice —
+not in env (see Get and run, step 5).
+
 `iblai.env` (`DOMAIN`, `PLATFORM`, `TOKEN`) feeds the skills, not the app. Never
-echo `TOKEN` or `IBLAI_API_KEY`; fill secrets with an editor, not a shell.
+echo `TOKEN` or `IBLAI_API_KEY`.
 
 ### Commands, and what green means
 
@@ -471,8 +522,28 @@ it is a placeholder); `/about` 404s with the flag off.
   in the OS.
 - The deploy skill builds `.env.production` from `.env.local` through a key
   allowlist (`NEXT_PUBLIC_*`, `IBLAI_API_KEY`, `PAYWALL_*`, `CSP_MODE`) and
-  drops everything else: that is why the app's name is `NEXT_PUBLIC_APP_NAME`,
-  and why `IBLAI_APP_BASE_URL` is optional (a deployed app uses its own origin).
+  drops everything else: the two keys a deploy needs pass, and
+  `IBLAI_APP_BASE_URL` is optional (a deployed app uses its own origin).
+- SCIM (`/api/orgs/<key>/scim/v2/Users`, the app's key) creates a user with no
+  platform link when `platformOrgs` is omitted, answers 200 with the existing
+  user for a known `userName`, and 400 "Username mismatch" for a fresh
+  `userName` on a known email; its list filters only the platform's own
+  members, so a stranger's existing email cannot be looked up.
+- The login SPA completes a code, password or token login without the
+  `tenant` it was asked for, lands on the user's first platform, and its
+  `data=` carries no `tenants`: send sign-ins to `/` (the `TenantProvider`
+  re-reads memberships there), never to `/paywall`; a user with zero
+  platforms ends on the SPA's 409 page, so link before sign-in.
+- `window.__ENV__` is written by the root layout from the platform's public
+  metadata (`apps.<slug>`), keys with values only, with the CSP nonce from
+  the `x-nonce` request header; `lib/iblai/config.ts` reads it before
+  `process.env`.
+- `consolidated-token/provision` (tokens for a user of the platform, minted
+  for the key) answers 404 until ibl.ai sets
+  `ENABLE_PLATFORM_CONSOLIDATED_PROXY_PROVISIONING` for the platform; the app
+  treats that as "sign in by email code", not as an error.
+- Platform API Token names are unique per platform (`platform/api-tokens/`,
+  session `Token` only, secret in the creation response only).
 - After deleting a route or layout file, `pnpm build` can fail its type check
   on `.next/dev/types/validator.ts`, which the last `next dev` generated and
   which still imports the deleted file. `rm -rf .next/dev/types` (or one

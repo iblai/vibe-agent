@@ -42,6 +42,8 @@ const DM = "https://api.example.edu/dm";
 const META_URL = `${DM}/api/core/orgs/testorg/metadata/`;
 const LINK_URL = `${DM}/api/core/users/platforms/`;
 const CONFIG_URL = `${DM}/api/core/users/platforms/config/`;
+const SCIM_URL = `${DM}/api/orgs/testorg/scim/v2/Users`;
+const PROVISION_URL = `${DM}/api/core/consolidated-token/provision/`;
 const proxyFor = (username: string) =>
   `${DM}/api/ai-mentor/orgs/testorg/users/${username}/providers/stripe/payments`;
 // Calls the app makes AS the platform run on the Api-Token owner's path; the
@@ -53,6 +55,8 @@ let dmCalls: { url: string; init?: RequestInit }[] = [];
 let metaWrites: { headers: Record<string, string>; body: any }[] = [];
 let linkWrites: { headers: Record<string, string>; body: any }[] = [];
 let configWrites: { headers: Record<string, string>; body: any }[] = [];
+let scimWrites: { headers: Record<string, string>; body: any }[] = [];
+let provisionWrites: { headers: Record<string, string>; body: any }[] = [];
 
 const monthly = (over: Record<string, unknown> = {}) => ({
   version: 1,
@@ -77,16 +81,28 @@ const stubFetch = ({
   apps = {} as Record<string, unknown>,
   dm = () => Response.json({}),
   selfJoin = () => Response.json({ platform_key: "testorg" }),
+  // SCIM: the account made for a stranger (id 77, the sent userName echoed).
+  scim = (body: any) =>
+    Response.json(
+      { id: "77", userName: body.userName, emails: body.emails, active: true },
+      { status: 201 },
+    ),
+  // consolidated-token/provision: off unless a test turns it on.
+  provision = () => Response.json({ detail: "Not found." }, { status: 404 }),
 }: {
   member?: boolean;
   apps?: Record<string, unknown>;
   dm?: (url: string, init?: RequestInit) => Response;
   selfJoin?: () => Response;
+  scim?: (body: any) => Response;
+  provision?: () => Response;
 } = {}) => {
   dmCalls = [];
   metaWrites = [];
   linkWrites = [];
   configWrites = [];
+  scimWrites = [];
+  provisionWrites = [];
   return vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -117,6 +133,15 @@ const stubFetch = ({
       if (url === CONFIG_URL) {
         configWrites.push({ headers, body: JSON.parse(init?.body as string) });
         return selfJoin();
+      }
+      if (url === SCIM_URL) {
+        const body = JSON.parse(init?.body as string);
+        scimWrites.push({ headers, body });
+        return scim(body);
+      }
+      if (url === PROVISION_URL) {
+        provisionWrites.push({ headers, body: JSON.parse(init?.body as string) });
+        return provision();
       }
       dmCalls.push({ url, init });
       return dm(url, init);
@@ -184,11 +209,16 @@ describe("POST /api/paywall/checkout", () => {
       body,
     });
 
-  it("401s without a sign-in", async () => {
+  it("400s a stranger without a valid email, making no account and calling Stripe for nothing", async () => {
+    process.env.PAYWALL_PRICE_IDS = "price_a";
     stubFetch();
     const { POST } = await loadCheckout();
-    const res = await POST(post(JSON.stringify({ price_id: "price_a" })));
-    expect(res.status).toBe(401);
+    for (const body of [{ price_id: "price_a" }, { price_id: "price_a", email: "not-an-email" }]) {
+      const res = await POST(post(JSON.stringify(body)));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toContain("email");
+    }
+    expect(scimWrites).toHaveLength(0);
     expect(dmCalls).toHaveLength(0);
   });
 
@@ -289,8 +319,64 @@ describe("POST /api/paywall/checkout", () => {
       // On the origin the request arrived on (IBLAI_APP_BASE_URL unset).
       success_url: "http://localhost:3000/paywall/return?session_id={CHECKOUT_SESSION_ID}",
       cancel_url: "http://localhost:3000/paywall",
-      metadata: { ibl_username: "jane", app: "demo-app" },
+      // ibl_user_id lets the return path link the buyer without a sign-in.
+      metadata: { ibl_username: "jane", ibl_user_id: "7", app: "demo-app" },
     });
+  });
+
+  it("makes a stranger's account first (SCIM, no membership), then mints for that username", async () => {
+    process.env.PAYWALL_PRICE_IDS = "price_a";
+    const sessions: unknown[] = [];
+    stubFetch({
+      dm: (url, init) => {
+        if (url.endsWith("/prices/price_a/?expand[]=product"))
+          return Response.json({ id: "price_a", unit_amount: 900, currency: "usd", product: {} });
+        if (url.includes("/customers/search/")) return Response.json({ data: [] });
+        if (url.endsWith("/customers/")) return Response.json({ id: "cus_new" });
+        sessions.push(JSON.parse(init?.body as string));
+        return Response.json({ id: "cs_new", url: "https://stripe.test/cs_new" });
+      },
+    });
+    const { POST } = await loadCheckout();
+
+    const res = await POST(
+      post(JSON.stringify({ price_id: "price_a", email: " New.Buyer@X.io " })),
+    );
+
+    expect(res.status).toBe(200);
+    // One SCIM create with the app's key: a derived username, the email, no platformOrgs.
+    expect(scimWrites).toHaveLength(1);
+    expect(scimWrites[0].headers.Authorization).toBe("Api-Token platform-key");
+    const sent = scimWrites[0].body;
+    // Lower-cased and trimmed first; the DM's own SSO shape: short local part + 6 hex.
+    expect(sent.userName).toMatch(/^newbuyer_[0-9a-f]{6}$/);
+    expect(sent).toMatchObject({
+      schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      name: { formatted: "new.buyer" },
+      emails: [{ value: "new.buyer@x.io", primary: true }],
+      active: true,
+    });
+    expect(sent.platformOrgs).toBeUndefined();
+    expect(linkWrites).toHaveLength(0);
+    // The Customer and the session are named after that new username and id.
+    const search = dmCalls.find((c) => c.url.includes("/customers/search/"))!;
+    expect(decodeURIComponent(search.url)).toContain(`metadata['ibl_username']:'${sent.userName}'`);
+    expect(sessions[0]).toMatchObject({
+      metadata: { ibl_username: sent.userName, ibl_user_id: "77", app: "demo-app" },
+    });
+  });
+
+  it("409s with the sign-in message when the platform already knows the email", async () => {
+    process.env.PAYWALL_PRICE_IDS = "price_a";
+    stubFetch({
+      dm: () => Response.json({ id: "price_a", unit_amount: 900, currency: "usd", product: {} }),
+      scim: () => Response.json({ error: "Username mismatch in error response" }, { status: 400 }),
+    });
+    const { POST } = await loadCheckout();
+    const res = await POST(post(JSON.stringify({ price_id: "price_a", email: "known@x.io" })));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain("Sign in");
+    expect(dmCalls.filter((c) => c.url.includes("/checkout-sessions/"))).toHaveLength(0);
   });
 
   it("reuses the buyer's Customer and sells a one-time plan in payment mode", async () => {
@@ -334,12 +420,108 @@ describe("GET /api/paywall/access?session_id= (back from Stripe)", () => {
   const retrieve = "GET /checkout-sessions/cs_42/?expand[]=subscription";
   const ledger = "GET jane:/paywall/access/?app=demo-app&session_id=cs_42";
 
-  it("401s without a sign-in", async () => {
-    stubFetch({ member: false });
+  // A stranger's session: the metadata the app stamped names them.
+  const strangers = (over: Record<string, unknown> = {}) =>
+    session({
+      metadata: { ibl_username: "newbuyer_abc123", ibl_user_id: "77", app: "demo-app" },
+      customer_details: { email: "new.buyer@x.io" },
+      ...over,
+    });
+  const strangerLedger = `GET ${proxyFor("newbuyer_abc123")}/paywall/access/?app=demo-app&session_id=cs_42`;
+
+  it("without a sign-in, links the buyer the session names and records the payment; no tokens while provisioning is off", async () => {
+    stubFetch({
+      dm: stripeDm({
+        [retrieve]: () => strangers(),
+        [strangerLedger]: () => ({ has_access: true }),
+      }),
+    });
     const { GET } = await loadAccess();
-    const res = await GET(get("?session_id=cs_42", authed));
-    expect(res.status).toBe(401);
-    expect(dmCalls).toHaveLength(0);
+    const res = await GET(get("?session_id=cs_42&email=new.buyer@x.io"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ joined: true });
+    expect(linkWrites).toEqual([
+      {
+        headers: expect.objectContaining({ Authorization: "Api-Token platform-key" }),
+        body: { user_id: 77, platform_key: "testorg", active: true },
+      },
+    ]);
+    // Provision was asked with the key and answered 404: the buyer signs in by email.
+    expect(provisionWrites).toEqual([
+      {
+        headers: expect.objectContaining({ Authorization: "Api-Token platform-key" }),
+        body: { username: "newbuyer_abc123", email: "new.buyer@x.io", platform_key: "testorg" },
+      },
+    ]);
+  });
+
+  it("hands back the buyer's tokens in the Auth SPA's shape when the platform mints them and the email is the one that paid", async () => {
+    stubFetch({
+      dm: stripeDm({
+        [retrieve]: () => strangers(),
+        [strangerLedger]: () => ({ has_access: true }),
+      }),
+      provision: () =>
+        Response.json({
+          data: {
+            user: { user_id: 77, user_nicename: "newbuyer_abc123", user_email: "new.buyer@x.io" },
+            axd_token: { token: "axd-1", expires: "2030-01-01T00:00:00Z" },
+            dm_token: { token: "dm-1", expires: "2030-01-01T00:00:00Z" },
+            edx_jwt_token: { token: "jwt-1", expires: "2030-01-01T00:00:00Z" },
+          },
+        }),
+    });
+    const { GET } = await loadAccess();
+    expect(await (await GET(get("?session_id=cs_42&email=New.Buyer@x.io"))).json()).toEqual({
+      joined: true,
+      session: {
+        axd_token: "axd-1",
+        axd_token_expires: "2030-01-01T00:00:00Z",
+        dm_token: "dm-1",
+        dm_token_expires: "2030-01-01T00:00:00Z",
+        edx_jwt_token: "jwt-1",
+        userData: JSON.stringify({
+          user_id: 77,
+          user_nicename: "newbuyer_abc123",
+          user_email: "new.buyer@x.io",
+        }),
+        tenant: "testorg",
+        current_tenant: JSON.stringify({ key: "testorg" }),
+      },
+    });
+  });
+
+  it("mints no tokens for a return URL without the email that paid", async () => {
+    stubFetch({
+      dm: stripeDm({
+        [retrieve]: () => strangers(),
+        [strangerLedger]: () => ({ has_access: true }),
+      }),
+      provision: () => Response.json({ data: {} }),
+    });
+    const { GET } = await loadAccess();
+    for (const qs of ["?session_id=cs_42", "?session_id=cs_42&email=mallory@x.io"]) {
+      vi.resetModules();
+      expect(await (await (await loadAccess()).GET(get(qs))).json()).toEqual({ joined: true });
+    }
+    expect(provisionWrites).toHaveLength(0);
+    expect(GET).toBeDefined();
+  });
+
+  it("answers joined: false and links nobody while a stranger's session is unpaid", async () => {
+    stubFetch({ dm: stripeDm({ [retrieve]: () => strangers({ status: "open" }) }) });
+    const { GET } = await loadAccess();
+    expect(await (await GET(get("?session_id=cs_42&email=new.buyer@x.io"))).json()).toEqual({
+      joined: false,
+    });
+    expect(linkWrites).toHaveLength(0);
+    expect(provisionWrites).toHaveLength(0);
+  });
+
+  it("403s a session that names nobody when there is no sign-in to fall back on", async () => {
+    stubFetch({ dm: stripeDm({ [retrieve]: () => session() }) });
+    const { GET } = await loadAccess();
+    expect((await GET(get("?session_id=cs_42"))).status).toBe(403);
     expect(linkWrites).toHaveLength(0);
   });
 
@@ -502,42 +684,39 @@ describe("GET /api/paywall/access (a member's standing)", () => {
 });
 
 describe("GET /api/paywall/prices", () => {
-  const pricesReq = () => new NextRequest("http://localhost:3000/api/paywall/prices");
-
   it("is public, and 500s without PAYWALL_APP_SLUG", async () => {
     stubFetch();
     const { GET } = await loadPrices();
-    expect((await GET(pricesReq())).status).toBe(200);
+    expect((await GET()).status).toBe(200);
     delete process.env.PAYWALL_APP_SLUG;
     vi.resetModules();
     const fresh = await loadPrices();
-    expect((await fresh.GET(pricesReq())).status).toBe(500);
+    expect((await fresh.GET()).status).toBe(500);
   });
 
   it("reports the choice: undecided, free, or the one plan, with the platform's name", async () => {
     stubFetch();
     const { GET } = await loadPrices();
-    expect(await (await GET(pricesReq())).json()).toEqual({
+    expect(await (await GET()).json()).toEqual({
       app: "demo-app",
       paywall: false,
       decided: false,
       source: "none",
-      // The platform's $0 sign-up, returning through the Auth SPA to this origin.
-      signUpUrl: expect.stringContaining(
-        `/stripe/checkout/redirect/credits-free-plan/?redirect_url=${encodeURIComponent("https://login.iblai.app/login?app=custom&redirect-to=http://localhost:3000&tenant=testorg")}`,
-      ),
+      appName: "",
       platformName: "Acme",
       prices: [],
       settings: null,
     });
 
     vi.resetModules();
-    stubFetch({ apps: { "demo-app": monthly() } });
+    stubFetch({ apps: { "demo-app": monthly({ app_name: "Caveman Coach", agent_id: "m-1" }) } });
     const fresh = await loadPrices();
-    expect(await (await fresh.GET(pricesReq())).json()).toMatchObject({
+    expect(await (await fresh.GET()).json()).toMatchObject({
       paywall: true,
       decided: true,
       source: "metadata",
+      // The join page's "Join <name>": the app's own name from apps.<slug>, never the platform's.
+      appName: "Caveman Coach",
       platformName: "Acme",
       prices: [{ id: "price_1", name: "Monthly access", unitAmount: 2900, interval: "month" }],
       settings: { access: "monthly", amount: 2900 },
@@ -557,7 +736,7 @@ describe("GET /api/paywall/prices", () => {
       }),
     });
     const { GET } = await loadPrices();
-    expect(await (await GET(pricesReq())).json()).toMatchObject({
+    expect(await (await GET()).json()).toMatchObject({
       source: "env",
       prices: [{ id: "price_a", name: "Acme access", unitAmount: 4900, interval: null }],
     });
@@ -570,7 +749,7 @@ describe("GET /api/paywall/prices", () => {
       dm: () => Response.json({ error: "No Stripe credential configured" }, { status: 400 }),
     });
     const { GET } = await loadPrices();
-    const res = await GET(pricesReq());
+    const res = await GET();
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "No Stripe credential configured" });
   });

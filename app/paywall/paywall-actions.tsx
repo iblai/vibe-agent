@@ -2,14 +2,18 @@
 
 import { useState } from "react";
 import { LoadingScreen } from "@/components/loading-screen";
-import { errorWithStatus, paywallFetch } from "@/lib/paywall-client";
+import { BUYER_EMAIL_KEY, errorWithStatus, paywallFetch } from "@/lib/paywall-client";
 
-/** The join page's one loud control: the buy button, or "create your account" for a stranger. */
+/** The join page's one loud control: the buy button. */
 export const PRIMARY_BUTTON =
   "inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#2563EB] to-[#93C5FD] px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
 
-/** Start the checkout for one plan; Stripe takes over from here. */
-export function BuyButton({ priceId }: { priceId: string }) {
+/**
+ * Start the checkout for one plan; Stripe takes over from here. A stranger
+ * sends the email they typed (an account is made for it); the return page
+ * reads it back from sessionStorage to finish their sign-in.
+ */
+export function BuyButton({ priceId, email }: { priceId: string; email?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -19,9 +23,10 @@ export function BuyButton({ priceId }: { priceId: string }) {
     try {
       const { checkout_url } = await paywallFetch<{ checkout_url: string }>(
         "/api/paywall/checkout",
-        { method: "POST", json: { price_id: priceId } },
+        { method: "POST", json: { price_id: priceId, ...(email !== undefined && { email }) } },
       );
       if (!checkout_url) throw new Error("The platform returned no checkout URL");
+      if (email) sessionStorage.setItem(BUYER_EMAIL_KEY, email.trim().toLowerCase());
       window.location.assign(checkout_url);
     } catch (e) {
       // The route's own words, with the status: a misconfigured key or a refused

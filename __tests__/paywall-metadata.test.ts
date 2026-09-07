@@ -139,6 +139,7 @@ describe("resolveCatalogue / allowedPriceIds", () => {
       paywall: false,
       decided: false,
       source: "none",
+      appName: "",
       platformName: "Acme",
       prices: [],
       settings: null,
@@ -179,6 +180,7 @@ describe("resolveCatalogue / allowedPriceIds", () => {
       paywall: true,
       decided: true,
       source: "metadata",
+      appName: "",
       platformName: "Acme",
       prices: [
         {

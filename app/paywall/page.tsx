@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import config from "@/lib/iblai/config";
-import { hasLiveDmToken, redirectToAuthSpa, saveReturnPath } from "@/lib/iblai/auth-utils";
+import { hasLiveDmToken, redirectToAuthSpa } from "@/lib/iblai/auth-utils";
 import { isTenantMember, readTenants, resolveAppTenant } from "@/lib/iblai/tenant";
 import { fetchCatalogue, type CatalogueView } from "@/lib/paywall-client";
 import { PlanCard } from "@/components/plan-card";
 import { LoadingScreen } from "@/components/loading-screen";
-import { BuyButton, PRIMARY_BUTTON } from "./paywall-actions";
+import { Input } from "@/components/ui/input";
+import { BuyButton } from "./paywall-actions";
 
 type Visitor = { signedIn: boolean; member: boolean; email: string };
 
@@ -41,11 +42,14 @@ function joinLine(prices: CatalogueView["prices"]): string {
 
 // The join page. The plans come from /api/paywall/prices: PAYWALL_PRICE_IDS if
 // set, else the choice the admin made at /setup (platform metadata,
-// apps.<slug>). Paying makes the signed-in buyer a member of the platform.
+// apps.<slug>). Paying makes the buyer a member of the platform: a signed-in
+// user with their own account, or a stranger with the account made for the
+// email they type here — one Stripe page, no sign-up page.
 export default function PaywallPage() {
   const [catalogue, setCatalogue] = useState<CatalogueView | null>(null);
   const [error, setError] = useState("");
   const [visitor] = useState(readVisitor);
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     fetchCatalogue()
@@ -57,7 +61,7 @@ export default function PaywallPage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-8">
       <div className="w-full max-w-md space-y-6 text-center">
         <h1 className="bg-gradient-to-r from-[#00b0ef] to-[#0058cc] bg-clip-text text-4xl font-bold text-transparent">
-          Join {config.appName() || "this app"}
+          Join {catalogue?.appName || "this app"}
         </h1>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -88,9 +92,23 @@ export default function PaywallPage() {
               </p>
             ) : (
               <div className="flex flex-col gap-4">
+                {!visitor.signedIn && (
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    aria-label="Your email"
+                  />
+                )}
                 {catalogue.prices.map((p) => (
                   <PlanCard key={p.id} price={p}>
-                    {visitor.signedIn && <BuyButton priceId={p.id} />}
+                    {visitor.signedIn ? (
+                      <BuyButton priceId={p.id} />
+                    ) : (
+                      <BuyButton priceId={p.id} email={email} />
+                    )}
                   </PlanCard>
                 ))}
               </div>
@@ -100,22 +118,13 @@ export default function PaywallPage() {
                 Signed in as {visitor.email || "your ibl.ai account"}
               </p>
             ) : (
-              <div className="space-y-2">
-                <a
-                  href={catalogue.signUpUrl}
-                  onClick={() => saveReturnPath("/paywall")}
-                  className={PRIMARY_BUTTON}
-                >
-                  Create Account
-                </a>
-                <button
-                  type="button"
-                  onClick={() => void redirectToAuthSpa("/paywall", undefined, false, true)}
-                  className={`text-sm ${linkClass}`}
-                >
-                  Already have an account? Sign in
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => void redirectToAuthSpa("/", undefined, false, true)}
+                className={`text-sm ${linkClass}`}
+              >
+                Already have an ibl.ai account? Sign in
+              </button>
             )}
           </>
         )}

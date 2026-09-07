@@ -33,9 +33,15 @@ function getRedirectOrigin(): string {
   return origin;
 }
 
-/** The Auth SPA's login URL that comes back to {origin}/sso-login-complete, scoped to {tenant} when given. */
-export const authLoginUrl = (origin: string, tenant: string) =>
-  `${config.authUrl()}/login?app=custom&redirect-to=${origin}${tenant ? `&tenant=${encodeURIComponent(tenant)}` : ""}`;
+/**
+ * The Auth SPA's login URL that comes back to {origin}/sso-login-complete,
+ * scoped to {tenant} when given; with {email} the SPA skips its form and mails
+ * that address a sign-in code.
+ */
+export const authLoginUrl = (origin: string, tenant: string, email = "") =>
+  `${config.authUrl()}/login?app=custom&redirect-to=${origin}` +
+  (tenant ? `&tenant=${encodeURIComponent(tenant)}` : "") +
+  (email ? `&email=${encodeURIComponent(email)}` : "");
 
 /** Where SsoLogin sends the browser once the Auth SPA returns (the key it reads, then clears). */
 export const saveReturnPath = (path: string) => localStorage.setItem("redirectTo", path);

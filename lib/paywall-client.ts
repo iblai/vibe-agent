@@ -21,9 +21,9 @@ export type CatalogueView = {
   paywall: boolean;
   decided: boolean;
   source: "env" | "metadata" | "none";
+  /** apps.<slug>.app_name from the platform's public metadata. */
+  appName: string;
   platformName: string;
-  /** The platform's own $0 sign-up for a stranger; it returns here signed in. */
-  signUpUrl: string;
   prices: CataloguePriceView[];
   settings: { access: Access; amount: number | null } | null;
 };
@@ -31,6 +31,8 @@ export type CatalogueView = {
 /** /api/paywall/access: with a session_id, whether the buyer is in now; without one, a member's standing. */
 export type AccessView = {
   joined?: boolean;
+  /** Tokens for the buyer, in the Auth SPA's `data=` shape, when the platform minted them. */
+  session?: Record<string, string>;
   has_access?: boolean;
   payer?: boolean;
   paywall?: boolean;
@@ -48,6 +50,9 @@ export class PaywallRequestError extends Error {
 
 export const dmToken = () =>
   typeof window === "undefined" ? "" : (localStorage.getItem("dm_token") ?? "");
+
+/** Where the buyer typed their email on the join page; the return page reads it back (same browser). */
+export const BUYER_EMAIL_KEY = "paywall_email";
 
 /** fetch() a paywall route, signed in when a token exists; a non-2xx throws the server's message. */
 export async function paywallFetch<T = unknown>(
