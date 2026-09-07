@@ -25,15 +25,17 @@ everything inside it (`cd vibe-agent` for every command) so this file
 governs; this section is the procedure. It needs Node 20 or newer (22
 recommended) and pnpm 11 (`corepack enable`, or `npm i -g pnpm`). It is
 written for a Claude that controls a browser; where it cannot, each browser
-step says what the person does instead. Never type the person's password,
-card or Stripe key for them; the Platform API Token is yours to mint and to
-write into env, and so are the platform key, the agent and the app's name.
-Never print `.env.local`, `iblai.env` or a token, and never ask for a key or
-token in chat. A refusal by a browser tool, or your own reluctance to touch a
+step says what the person does instead. Never type the person's password
+or card for them; the Platform API Token is yours to mint and to write into
+env, and so are the platform key, the agent and the app's name. Never print
+`.env.local`, `iblai.env` or a token, and never ask for the Platform API
+Token in chat. The Stripe key is the one secret they hand you, in chat, when
+step 5 asks: it goes straight to the platform's credential store through the
+command, and never into a file, a reply or the OS. A refusal by a browser tool, or your own reluctance to touch a
 session token, is never a stop and never turns into "copy this into
 .env.local": step 3 is a ladder — take the next rung. A later ask about
 money — "change the price", "make it free", "charge $20 a month" — is step 5
-alone.
+alone: one command, `node scripts/paywall-setup.mjs`, never the OS.
 
 1. **Sign the creator in.** Open https://login.iblai.app/me. A sign-in
    screen means they are not signed in: ask exactly one question with two
@@ -184,34 +186,35 @@ alone.
    they give (theirs as typed, not reworded). Write it with rung 2's write
    (`NAME=<name>`, the rest empty). It is what the join page
    ("Join <name>"), the browser tab and the Stripe product are called.
-5. **Payments.** Ask, in chat, one question: free, one-time or monthly —
-   and, for a paid answer, the USD price. A paid answer needs the platform's
-   own Stripe key on file:
-   `GET https://api.iblai.app/dm/api/ai-account/orgs/<key>/masked-integration-credential/`
-   with the `Api-Token` header lists it as `stripe` when it is. Without one:
-   on the OS tab (Admin mode on) open **Integrations** in the sidebar's
-   bottom cluster → the **Data Sources** tab → **Add Data Source** →
-   provider **Stripe**, and ask them to paste a restricted key from their
-   Stripe account into the `key` field and press Submit themselves; no
-   screenshot and no reading of that tab while they type; wait for "done",
-   then confirm with the masked GET. Then set it up — the product, the
-   price, the self-join switch and the recorded choice, all on the platform
-   with the token from `.env.local`, run from the app's directory:
+5. **Payments — one command, never the OS, never by hand.** Ask, in chat,
+   one question: free, one-time or monthly — and, for a paid answer, the USD
+   price. Then run this from the app's directory; it does the whole setup on
+   the platform with the token from `.env.local` — the product, the price,
+   the self-join switch and the recorded choice — and prints one line, which
+   is the whole step:
 
    ```bash
    node scripts/paywall-setup.mjs free
    node scripts/paywall-setup.mjs one_time 49      # USD
    node scripts/paywall-setup.mjs monthly 29.99
+   STRIPE_KEY=rk_… node scripts/paywall-setup.mjs monthly 29.99   # saves the key first, then the same
    ```
 
-   It prints one line — `paywall: $29.99/month · price price_… · self-join
-closed`, or `paywall: free · self-join open` — report it. `paywall setup
-failed: 400 … No Stripe credential` means the key is not on file yet;
-   `403` means the token is another platform's. Free needs no key and makes
-   no Stripe call. Nothing in the app changes the choice; to change it
-   later, run this step again (a running app re-reads it within a minute).
-   Without a browser, the key: they save it themselves in the OS by the
-   path above.
+   `paywall: $29.99/month · price price_… · self-join closed` or
+   `paywall: free · self-join open` → report it; done.
+   `paywall setup failed: no Stripe key on the platform yet …` (a paid
+   answer, the first time) → ask, in chat, for a restricted key from their
+   Stripe account (Stripe → Developers → API keys → Create restricted key:
+   write on Products, Prices, Checkout Sessions, Customers; read on
+   Subscriptions), then run the same command with `STRIPE_KEY=<key>` in
+   front: the script saves it as the platform's `stripe` credential through
+   the DM's own endpoint, then does the setup. Never repeat the key, never
+   write it anywhere. `paywall setup failed: 403 …` → the token is another
+   platform's (step 3). Nothing else sets payments up: not the OS at all —
+   not its Integrations dialog, not its Monetization tab (Stripe Connect,
+   another system) — not products or prices made by hand, not the app. Free
+   needs no key and makes no Stripe call. To change the choice later, run
+   the command again (a running app re-reads it within a minute).
 
 6. **Install, start and preview.** `pnpm install --ignore-scripts`,
    `pnpm husky` (the commit hook), and, with port 3000 free
@@ -237,22 +240,22 @@ When adding UI features, follow this priority order:
 
 ### When the user asks to add...
 
-| Feature                                     | Use this                                                                                                                                                                     | NOT this                                                               |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Profile page / dropdown                     | `/iblai-vibe-profile` skill + `Profile`, `UserProfileDropdown` from SDK                                                                                                      | Custom profile form                                                    |
-| Account / org settings                      | `/iblai-vibe-account` skill + `Account` from SDK                                                                                                                             | Custom settings page                                                   |
-| Analytics dashboard                         | `/iblai-vibe-analytics` skill + `AnalyticsOverview`, `AnalyticsLayout` from SDK                                                                                              | Chart library from scratch                                             |
-| Notifications                               | `/iblai-vibe-notification` skill + `NotificationDropdown` from SDK                                                                                                           | Custom notification system                                             |
-| Chat / AI assistant                         | `/iblai-vibe-agent-chat` skill + `Chat` from SDK                                                                                                                             | Custom chat UI                                                         |
-| Auth / login                                | `/iblai-vibe-auth` skill + `AuthProvider`, `SsoLogin` from SDK                                                                                                               | Custom auth flow                                                       |
-| Invite users                                | `/iblai-vibe-invite` skill + `InviteUserDialog` from SDK                                                                                                                     | Custom invite form                                                     |
-| Workflow builder                            | `/iblai-vibe-workflow` skill + workflow components from SDK                                                                                                                  | Custom node editor                                                     |
-| Course content                              | `/iblai-vibe-course-access` skill + `CourseContentLayout`, `CourseContentTabPage` from SDK                                                                                   | Custom course player                                                   |
-| Create / publish courses                    | `/iblai-vibe-course-create` skill (Course Creation API)                                                                                                                      | Manually authoring OLX in edX Studio                                   |
-| Onboarding flow                             | `/iblai-vibe-onboard` skill                                                                                                                                                  | Custom onboarding from scratch                                         |
-| Charge for the app / paywall / monetization | `/iblai-vibe-monetization-app-paywall` skill — installs the ready-made paywall components (ops-init `assets/stripe-components/`) and wires env + the `(app)/layout.tsx` gate | Custom Stripe integration, raw Stripe keys, or Stripe.js in the client |
-| Buttons, forms, modals, tables              | shadcn/ui (`npx shadcn@latest add button dialog table`)                                                                                                                      | Raw HTML or other UI libraries                                         |
-| Page sections / blocks                      | shadcn/ui blocks (`npx shadcn@latest add @shadcn-space/hero-01`)                                                                                                             | Custom layout from scratch                                             |
+| Feature                                     | Use this                                                                                                                                                                                                                                                                                                 | NOT this                                                               |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Profile page / dropdown                     | `/iblai-vibe-profile` skill + `Profile`, `UserProfileDropdown` from SDK                                                                                                                                                                                                                                  | Custom profile form                                                    |
+| Account / org settings                      | `/iblai-vibe-account` skill + `Account` from SDK                                                                                                                                                                                                                                                         | Custom settings page                                                   |
+| Analytics dashboard                         | `/iblai-vibe-analytics` skill + `AnalyticsOverview`, `AnalyticsLayout` from SDK                                                                                                                                                                                                                          | Chart library from scratch                                             |
+| Notifications                               | `/iblai-vibe-notification` skill + `NotificationDropdown` from SDK                                                                                                                                                                                                                                       | Custom notification system                                             |
+| Chat / AI assistant                         | `/iblai-vibe-agent-chat` skill + `Chat` from SDK                                                                                                                                                                                                                                                         | Custom chat UI                                                         |
+| Auth / login                                | `/iblai-vibe-auth` skill + `AuthProvider`, `SsoLogin` from SDK                                                                                                                                                                                                                                           | Custom auth flow                                                       |
+| Invite users                                | `/iblai-vibe-invite` skill + `InviteUserDialog` from SDK                                                                                                                                                                                                                                                 | Custom invite form                                                     |
+| Workflow builder                            | `/iblai-vibe-workflow` skill + workflow components from SDK                                                                                                                                                                                                                                              | Custom node editor                                                     |
+| Course content                              | `/iblai-vibe-course-access` skill + `CourseContentLayout`, `CourseContentTabPage` from SDK                                                                                                                                                                                                               | Custom course player                                                   |
+| Create / publish courses                    | `/iblai-vibe-course-create` skill (Course Creation API)                                                                                                                                                                                                                                                  | Manually authoring OLX in edX Studio                                   |
+| Onboarding flow                             | `/iblai-vibe-onboard` skill                                                                                                                                                                                                                                                                              | Custom onboarding from scratch                                         |
+| Charge for the app / paywall / monetization | `/iblai-vibe-monetization-app-paywall` skill — installs the ready-made paywall components (ops-init `assets/stripe-components/`) and wires env + the `(app)/layout.tsx` gate — already wired in this app; payments are set up by `node scripts/paywall-setup.mjs` (Get and run, step 5), never in the OS | Custom Stripe integration, raw Stripe keys, or Stripe.js in the client |
+| Buttons, forms, modals, tables              | shadcn/ui (`npx shadcn@latest add button dialog table`)                                                                                                                                                                                                                                                  | Raw HTML or other UI libraries                                         |
+| Page sections / blocks                      | shadcn/ui blocks (`npx shadcn@latest add @shadcn-space/hero-01`)                                                                                                                                                                                                                                         | Custom layout from scratch                                             |
 
 ### Key rule
 
@@ -456,13 +459,13 @@ of users:
 
 Membership is the entitlement. Three rails, one boundary (`lib/paywall.ts`):
 
-| Call                                                                             | Who calls the platform                                                          | Credential                               | Path user                                                  |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------- |
-| customer + checkout session, session retrieve, ledger list, link / unlink        | this server                                                                     | `Api-Token IBLAI_API_KEY`                | the key's owner (a member); the buyer is named in metadata |
-| ledger record, live standing                                                     | this server                                                                     | `Api-Token IBLAI_API_KEY`                | the buyer, verified by `token/verify`, a member by then    |
-| read the platform's choice, plan display                                         | this server                                                                     | none: platform metadata is a public read | none                                                       |
-| retire/create product and price (paid only), self-join switch, record the choice | `scripts/paywall-setup.mjs`, from the terminal                                  | `Api-Token IBLAI_API_KEY`                | the key's owner                                            |
-| save the Stripe key                                                              | the creator, in the OS (Integrations → Data Sources → Add Data Source → Stripe) | their own OS session                     | none                                                       |
+| Call                                                                             | Who calls the platform                                            | Credential                               | Path user                                                  |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| customer + checkout session, session retrieve, ledger list, link / unlink        | this server                                                       | `Api-Token IBLAI_API_KEY`                | the key's owner (a member); the buyer is named in metadata |
+| ledger record, live standing                                                     | this server                                                       | `Api-Token IBLAI_API_KEY`                | the buyer, verified by `token/verify`, a member by then    |
+| read the platform's choice, plan display                                         | this server                                                       | none: platform metadata is a public read | none                                                       |
+| retire/create product and price (paid only), self-join switch, record the choice | `scripts/paywall-setup.mjs`, from the terminal                    | `Api-Token IBLAI_API_KEY`                | the key's owner                                            |
+| save the Stripe key                                                              | `scripts/paywall-setup.mjs`, with `STRIPE_KEY` in its environment | `Api-Token IBLAI_API_KEY`                | none                                                       |
 
 Why the app mints the checkout itself: the platform's own paywall checkout
 (`…/paywall/checkout/`) refuses a path user who is not a member, and a buyer
@@ -552,11 +555,12 @@ key owner (the proxy path user), the public metadata read for the current
 choice, then for a paid answer archive → product (reused while active and
 tagged) → price, then the self-join switch, then the metadata PUT; the first
 refusal stops it and records nothing; one `Idempotency-Key` per run, suffixed
-per Stripe call. The Stripe key never passes through it: the creator saves a
-restricted key as the platform's `stripe` integration credential in the OS
-(Integrations → Data Sources → Add Data Source → Stripe) and the DM's proxy
-reads it from there; `masked-integration-credential/` says whether one is on
-file.
+per Stripe call. The Stripe key reaches the platform the same way: with
+`STRIPE_KEY` in the command's environment the script first saves it as the
+platform's `stripe` integration credential through the DM's own endpoint
+(`integration-credential/`: POST, 409 → PATCH; `Api-Token`, admin), and the
+DM's proxy reads it from there — never a file, never the app, never the OS;
+`masked-integration-credential/` says whether one is on file.
 
 Where to change what: how a plan looks, `components/plan-card.tsx` and
 `lib/paywall-client.ts`; what is sellable and how a purchase becomes a
@@ -670,10 +674,9 @@ it is a placeholder); `/about` 404s with the flag off.
 - The DM keeps no app-paywall configuration: `paywall/checkout/` checks the
   price's product live for `metadata.app`, and that tag on an active product
   is the whole contract. The OS's Monetization tab is Stripe Connect item
-  paywalls (mentors, courses; the billing app) — a different system. Its
-  Integrations → Data Sources modal is schema-driven and lists the DM's
-  `stripe` provider (one sensitive field, `key`): that is where a platform's
-  own Stripe key is typed.
+  paywalls (mentors, courses; the billing app) — a different system — and
+  its Integrations → Data Sources modal, though it lists a Stripe provider,
+  is never used here: the key goes through the DM endpoint, by the script.
 - The platform API token (`Api-Token`) is in the DM's default auth chain, so
   the Stripe proxy, the credential endpoints, the self-join switch and the
   metadata write all take it (owner mode: the token's platform must be the

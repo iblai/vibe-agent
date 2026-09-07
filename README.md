@@ -70,7 +70,7 @@ Start Claude Code with `claude --chrome` and say:
 get https://github.com/iblai/vibe-agent
 ```
 
-It clones the repo and, as soon as it reads a file in it, follows the procedure in `AGENTS.md` in one run: it opens [login.iblai.app/me](https://login.iblai.app/me) in your browser and, if you are not signed in, asks one question — do you have an ibl.ai account? — then waits for you to sign in, or opens [ibl.ai/join](https://ibl.ai/join) to create your account and platform (it does not look at those pages while you fill them in); reads your platform key off `/me` (never the shared `main` platform: that one is everyone's, not yours); opens [os.ibl.ai](https://os.ibl.ai), takes the agent from the URL it lands on, mints a Platform API Token for your platform from that session and writes `.env.local` and `iblai.env` (platform, agent, token, and a name for the app — it suggests a readable one from what the agent does, you confirm or replace it); asks whether access is free, one-time or monthly and the price, and sets it up on the platform from the terminal (a free app needs no Stripe key; for a paid one you paste your restricted Stripe key into the platform yourself, in the OS's Integrations dialog, unwatched); starts the dev server and opens it; and publishes the app on ibl.ai hosting as `<name>.vercel.app`, asking only for the name. Without the browser extension it asks you for the values it cannot read. If it only clones, say `follow AGENTS.md`; or start inside the clone — `git clone https://github.com/iblai/vibe-agent && cd vibe-agent && claude --chrome` — and say `run it`.
+It clones the repo and, as soon as it reads a file in it, follows the procedure in `AGENTS.md` in one run: it opens [login.iblai.app/me](https://login.iblai.app/me) in your browser and, if you are not signed in, asks one question — do you have an ibl.ai account? — then waits for you to sign in, or opens [ibl.ai/join](https://ibl.ai/join) to create your account and platform (it does not look at those pages while you fill them in); reads your platform key off `/me` (never the shared `main` platform: that one is everyone's, not yours); opens [os.ibl.ai](https://os.ibl.ai), takes the agent from the URL it lands on, mints a Platform API Token for your platform from that session and writes `.env.local` and `iblai.env` (platform, agent, token, and a name for the app — it suggests a readable one from what the agent does, you confirm or replace it); asks whether access is free, one-time or monthly and the price, and runs `scripts/paywall-setup.mjs`, which sets it up on the platform (a free app needs no Stripe key; for a paid one it asks for your restricted Stripe key and saves it on the platform through the platform API, never in a file); starts the dev server and opens it; and publishes the app on ibl.ai hosting as `<name>.vercel.app`, asking only for the name. Without the browser extension it asks you for the values it cannot read. If it only clones, say `follow AGENTS.md`; or start inside the clone — `git clone https://github.com/iblai/vibe-agent && cd vibe-agent && claude --chrome` — and say `run it`.
 
 By hand:
 
@@ -97,7 +97,7 @@ By hand:
    node scripts/paywall-setup.mjs monthly 29.99   # or: one_time 49
    ```
 
-   A paid answer first needs the platform's Stripe key on file: in [os.ibl.ai](https://os.ibl.ai), Admin mode, Integrations (the sidebar's bottom cluster) → Data Sources → Add Data Source → Stripe, paste a **restricted** key (see Paywall below). Free needs none.
+   A paid answer needs the platform's Stripe key on file: the first time, put a **restricted** key in front — `STRIPE_KEY=rk_… node scripts/paywall-setup.mjs monthly 29.99` — and the script saves it on the platform through the platform API before setting the price (see Paywall below); it is never written to a file. Free needs none.
 
 4. Install and run:
 
@@ -129,7 +129,7 @@ Who gets in:
 Setup is one question, answered from the terminal — `node scripts/paywall-setup.mjs free | one_time <usd> | monthly <usd>`, with `IBLAI_API_KEY` from `.env.local` (the Get and run procedure asks it and runs this; run it again to change the answer):
 
 - **Free access** — anyone who signs in joins. No Stripe needed, ever.
-- **One-time fee** or **Monthly fee** — the price in USD. First, the platform needs a **restricted** Stripe key on file (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions), saved as the platform's `stripe` integration credential in the OS: [os.ibl.ai](https://os.ibl.ai) → Integrations (the sidebar's bottom cluster) → Data Sources → Add Data Source → Stripe. This app never sees it.
+- **One-time fee** or **Monthly fee** — the price in USD. First, the platform needs a **restricted** Stripe key on file (Stripe → Developers → API keys → Create restricted key: write on Products, Prices, Checkout Sessions, Customers; read on Subscriptions), saved as the platform's `stripe` integration credential by the script through the platform API — `STRIPE_KEY=rk_… node scripts/paywall-setup.mjs monthly 29.99`, the first time or to replace it. It is never written to a file, and this app's server never sees it.
 
 For a paid answer the script creates the Stripe product (named after the app, tagged `metadata.app = PAYWALL_APP_SLUG`) and the price, retires the previous price if the answer changed, closes self-join (payment is the only way in), and records the choice in the platform's metadata under `apps.<PAYWALL_APP_SLUG>`. Free opens self-join and records the choice, touching Stripe not at all; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the app sells only the recorded one:
 
@@ -149,26 +149,19 @@ For a paid answer the script creates the Stripe product (named after the app, ta
 
 That metadata is a **public read** on the platform (ids and amounts only, never a key), so the deployed app needs no extra credential to know what it sells. Runtime rule (`lib/paywall.ts`): `PAYWALL_PRICE_IDS`, if set, is what the app sells; otherwise the recorded choice; free or unanswered means everyone who signs in gets in. Test with card `4242 4242 4242 4242`. A cancellation takes effect on the payer's next visit, after the platform's cache (about 75 s) and the app's 60 s session cache.
 
-Headless alternative, with `DOMAIN`, `PLATFORM`, `TOKEN` and `IBLAI_USERNAME` from `iblai.env`:
+Headless, with `DOMAIN`, `PLATFORM`, `TOKEN` and `IBLAI_USERNAME` from `iblai.env` — the script above is the setup; these only check and list:
 
 ```bash
 PAY="https://api.$DOMAIN/dm/api/ai-mentor/orgs/$PLATFORM/users/$IBLAI_USERNAME/providers/stripe/payments"
 AUTH="Authorization: Api-Token $TOKEN"
 
 curl -s -H "$AUTH" "$PAY/products/?limit=1"
-# 200 connected · 400 no `stripe` credential · 502 Stripe rejected the key · 404 backend too old
-
-curl -s -H "$AUTH" -H 'Content-Type: application/json' -X POST "$PAY/products/" \
-  -d '{"name":"vibe-agent access","metadata":{"app":"vibe-agent"}}'
-
-curl -s -H "$AUTH" -H 'Content-Type: application/json' -X POST "$PAY/prices/" \
-  -d '{"product":"prod_…","unit_amount":2900,"currency":"usd","recurring":{"interval":"month"}}'
-# drop "recurring" for a one-time price
+# 200 the platform's Stripe key works · 400 no `stripe` credential yet · 502 Stripe rejected the key
 
 curl -s -H "$AUTH" "$PAY/paywall/payments/?app=vibe-agent"   # who paid so far
 ```
 
-Then `PAYWALL_PRICE_IDS=price_xxx,price_yyy` in `.env.local`: the join page describes env-listed prices from Stripe itself.
+Several prices at once are the one case for `PAYWALL_PRICE_IDS=price_xxx,price_yyy` in `.env.local` (ids from the Stripe dashboard, on products tagged `metadata.app = vibe-agent`): the join page then describes env-listed prices from Stripe itself.
 
 ## Deployment
 
