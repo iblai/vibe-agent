@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.1](https://github.com/iblai/vibe-agent/compare/v1.4.0...v1.4.1) (2026-09-07)
+
+### Bug Fixes
+
+* stripe key saved via the dm credential endpoint by the setup script ([5f708e9](https://github.com/iblai/vibe-agent/commit/5f708e926ba4607fde767133e1c637e528f32af3))
+
 ## [1.4.0](https://github.com/iblai/vibe-agent/compare/v1.3.4...v1.4.0) (2026-09-07)
 
 ### Features
