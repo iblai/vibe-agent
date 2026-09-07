@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.2](https://github.com/iblai/vibe-agent/compare/v1.3.1...v1.3.2) (2026-09-07)
+
+### Documentation
+
+* mint the Platform API Token and write both env files in one command, never show it ([45c4d83](https://github.com/iblai/vibe-agent/commit/45c4d8319265749172377b65fb59f14985720943))
+
 ## [1.3.1](https://github.com/iblai/vibe-agent/compare/v1.3.0...v1.3.1) (2026-09-07)
 
 ### Bug Fixes
