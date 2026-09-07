@@ -15,21 +15,27 @@ This project is built on the ibl.ai platform using the `@iblai/iblai-js` SDK.
 ## Get and run
 
 When someone asks to get, clone, run, start, launch, boot, serve or publish
-this app — "get github.com/iblai/vibe-agent", "run the server", "start it",
-"publish it" — do the steps below in this order. If the repo is not cloned
-yet, `git clone https://github.com/iblai/vibe-agent` first and work inside
-it; this section is the procedure. It is written for a Claude that controls
-a browser; where it cannot, each browser step says what the person does
+this app — "get https://github.com/iblai/vibe-agent", "get
+github.com/iblai/vibe-agent", "run the server", "start it", "run it",
+"publish it" — do the steps below in this order, as one run: clone,
+onboarding, preview, deployment, with no "shall I go on?" between steps (the
+only questions are the ones the steps name). If the repo is not cloned yet,
+`git clone https://github.com/iblai/vibe-agent` first, then do everything
+inside it (`cd vibe-agent` for every command) so this file governs; this
+section is the procedure. It is written for a Claude that controls a
+browser; where it cannot, each browser step says what the person does
 instead. Never enter credentials for the person, never print `.env.local`,
 `iblai.env` or a token, and never ask for a key or token in chat.
 
 1. **Sign the creator in.** Open https://login.iblai.app/me. A sign-in
-   screen means they are not signed in: no ibl.ai account or no platform of
-   their own → open https://ibl.ai/join (ibl.ai's own $0 sign-up: it creates
-   the account and a platform with them as admin, and leaves them signed
-   in); returning → let them sign in. Wait for them, then re-navigate to
-   `/me` (the platform redirects elsewhere after a login). Without a
-   browser: send them those links and ask them to say when they are in.
+   screen means they are not signed in: ask exactly one question with two
+   choices, nothing else — **"Do you have an ibl.ai account?"** — **Yes, I'll
+   sign in** (leave the tab on the sign-in screen and wait for them) or
+   **No, create one for me** (navigate to https://ibl.ai/join, ibl.ai's own
+   $0 sign-up: it creates the account and a platform with them as admin and
+   leaves them signed in; wait there). Then re-navigate to `/me` (the
+   platform redirects elsewhere after a login). Without a browser: the same
+   two choices with the links, and wait for them to say they are in.
 2. **Read the platform off `/me`.** The page lists the account's username
    and every platform with its key. One platform → take it; several → ask
    which. Check it: `curl -fsS https://api.iblai.app/dm/api/core/orgs/<key>/metadata/`
@@ -90,13 +96,13 @@ instead. Never enter credentials for the person, never print `.env.local`,
    with `GET http://localhost:3000/api/paywall/prices`. Free needs no
    Stripe key at all.
 8. **Preview.** Reload http://localhost:3000/ and check the agent answers.
-9. **Offer to publish** on our hosting. Ask the name they want
-   (`<name>.vercel.app`: lowercase letters, digits, hyphens), set
-   `package.json` `name` to it (the deploy skill's slug source), run
-   `/iblai-vibe-ops-deploy`, and report the URL it returns (Vercel may
-   alter a long or taken name). Say once what is left: the deployed origin
-   among the platform's allowed redirect origins; `tauri.conf.json` is
-   updated by the skill.
+9. **Publish** on our hosting — part of the run, not an offer. Ask only the
+   name they want (`<name>.vercel.app`: lowercase letters, digits, hyphens),
+   set `package.json` `name` to it (the deploy skill's slug source), run
+   `/iblai-vibe-ops-deploy`, and report the URL it returns (Vercel may alter
+   a long or taken name). Say once what is left: the deployed origin among
+   the platform's allowed redirect origins; `tauri.conf.json` is updated by
+   the skill.
 
 ## Component Priority
 
