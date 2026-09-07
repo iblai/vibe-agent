@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.0](https://github.com/iblai/vibe-agent/compare/v1.4.1...v1.5.0) (2026-09-07)
+
+### Features
+
+* Stripe and price setup back in the app, onboarding asks with no browser, buyers straight to the owner's Stripe ([2b51881](https://github.com/iblai/vibe-agent/commit/2b518815a380c8914d2d0ecfada36c97381ea890))
+
 ## [1.4.1](https://github.com/iblai/vibe-agent/compare/v1.4.0...v1.4.1) (2026-09-07)
 
 ### Bug Fixes
