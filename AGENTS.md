@@ -33,9 +33,12 @@ instead. Never enter credentials for the person, never print `.env.local`,
    sign in** (leave the tab on the sign-in screen and wait for them) or
    **No, create one for me** (navigate to https://ibl.ai/join, ibl.ai's own
    $0 sign-up: it creates the account and a platform with them as admin and
-   leaves them signed in; wait there). Then re-navigate to `/me` (the
-   platform redirects elsewhere after a login). Without a browser: the same
-   two choices with the links, and wait for them to say they are in.
+   leaves them signed in; wait there). While they are on the sign-in page
+   or on ibl.ai/join, take no screenshot and read nothing from that tab —
+   it is their email and card; wait for them to say they are done. Then
+   re-navigate to `/me` (the platform redirects elsewhere after a login).
+   Without a browser: the same two choices with the links, and wait for
+   them to say they are in.
 2. **Read the platform off `/me`.** The page lists the account's username
    and every platform with its key. One platform → take it; several → ask
    which. Check it: `curl -fsS https://api.iblai.app/dm/api/core/orgs/<key>/metadata/`
@@ -87,7 +90,9 @@ instead. Never enter credentials for the person, never print `.env.local`,
    credential. Without one, and if they want to charge: on `/setup` pick a
    paid answer so the Monetize screen shows, and ask them to type their
    restricted Stripe key there themselves (the browser saves it to the
-   platform; you never see it). Then ask, in chat, free, one-time or
+   platform; you never see it — no screenshot and no reading of that tab
+   while they type; wait for them to say it is saved). Then ask, in chat,
+   free, one-time or
    monthly, and the USD price, and set it:
    `POST http://localhost:3000/api/paywall/admin/setup` with
    `{"access": "free"|"one_time"|"monthly", "amount": <cents or null>}`,
