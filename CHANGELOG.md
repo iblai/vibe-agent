@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.4](https://github.com/iblai/vibe-agent/compare/v1.3.3...v1.3.4) (2026-09-07)
+
+### Documentation
+
+* Platform API Token from os.ibl.ai Integrations → APIs → Add API, never a platform URL ([162fbbb](https://github.com/iblai/vibe-agent/commit/162fbbb8bf7cc74cf4d630c69f61ff1c655e34e0))
+
 ## [1.3.3](https://github.com/iblai/vibe-agent/compare/v1.3.2...v1.3.3) (2026-09-07)
 
 ### Documentation
