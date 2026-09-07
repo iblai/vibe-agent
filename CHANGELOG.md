@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0](https://github.com/iblai/vibe-agent/compare/v1.2.0...v1.3.0) (2026-09-07)
+
+### Features
+
+* buyers pay the owner directly, config on the platform, Claude Code onboarding ([abd45d5](https://github.com/iblai/vibe-agent/commit/abd45d5d37169b58ea1832e9ae3af12d2c82884b))
+
 ## [1.2.0](https://github.com/iblai/vibe-agent/compare/v1.1.0...v1.2.0) (2026-09-07)
 
 ### Features
