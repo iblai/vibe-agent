@@ -10,6 +10,7 @@ import {
   useVisitingTenant,
   useCachedSessionId,
 } from "@iblai/iblai-js/web-utils";
+import { PayGate } from "@/components/pay-gate";
 import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
@@ -96,8 +97,10 @@ function AgentChat() {
   }
   if (!tenantKey || !sessionReady) return null;
 
+  // The gate sits around the SDK's composer: an unpaid member's send opens the
+  // pay modal instead (components/pay-gate.tsx).
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <PayGate>
       <Chat
         key={`${mentorId}:${restoreSessionId ?? ""}:${newParam ?? ""}`}
         isPreviewMode={false}
@@ -112,6 +115,6 @@ function AgentChat() {
         userIsStudent={!adminMode}
         showExploreMentors={false}
       />
-    </div>
+    </PayGate>
   );
 }

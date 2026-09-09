@@ -3,30 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CardInfoIcon,
   OnboardingShell,
   StepHeader,
   onboardingPrimaryButtonClass,
   onboardingSecondaryButtonClass,
 } from "@iblai/iblai-js/web-containers";
-import {
-  useCreateIntegrationCredentialMutation,
-  useGetMaskedIntegrationCredentialsQuery,
-  useUpdateIntegrationCredentialMutation,
-} from "@iblai/iblai-js/data-layer";
 import { LoadingScreen } from "@/components/loading-screen";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { resolveAppTenant } from "@/lib/iblai/tenant";
 import {
   PaywallRequestError,
   errorMessage,
   fetchCatalogue,
+  invalidateCatalogue,
   markSetupDone,
-  maskedKeyShort,
   paywallFetch,
   type Access,
+  type ConnectStatus,
 } from "@/lib/paywall-client";
 
 const OPTIONS: { value: Access; title: string; detail: string }[] = [
@@ -35,21 +29,50 @@ const OPTIONS: { value: Access; title: string; detail: string }[] = [
   { value: "monthly", title: "Monthly fee", detail: "A subscription, cancelled any time." },
 ];
 
-// The platform's credential name for the platform's own Stripe key (one field, `key`).
-const CREDENTIAL = "stripe";
+type Screen = "question" | "connect";
 
-const errorStatus = (e: unknown) =>
-  e && typeof e === "object" && "status" in e ? Number((e as { status: unknown }).status) : NaN;
+const CONNECT_ROUTE = "/api/paywall/admin/connect";
+/** The answer in progress survives the round trip to Stripe here; cleared after the save. */
+const PENDING_KEY = "paywall_setup_pending";
 
-function credentialMessage(e: unknown): string {
-  const data = (e as { data?: { error?: string; detail?: string } })?.data;
-  return data?.error ?? data?.detail ?? errorMessage(e);
+type Pending = { access: Access; amount: string };
+
+/** `?stripe_connect=connected|error&reason=…`: how the platform's callback lands the admin back here. */
+function readReturn(): { result: string; reason: string } | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get("stripe_connect");
+  return result ? { result, reason: params.get("reason") ?? "" } : null;
+}
+
+function readPending(): Pending | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+/** Plain words for the platform's `reason` codes. */
+function connectFailure(reason: string): string {
+  switch (reason) {
+    case "access_denied":
+      return "You cancelled on Stripe.";
+    case "already_connected":
+      return "A Stripe account is already connected.";
+    case "account_linked_elsewhere":
+      return "That Stripe account is already connected to another platform.";
+    case "not_configured":
+      return "Stripe Connect is not set up on this platform’s backend yet.";
+    default:
+      return `Stripe connection failed (${reason || "unknown"}).`;
+  }
 }
 
 function setupMessage(e: unknown): string {
   if (e instanceof PaywallRequestError) {
     if (e.status === 502)
-      return "Stripe rejected the key. Check it is a restricted key for the right account and try again.";
+      return "Stripe rejected the platform’s credential. Check the connected account and try again.";
     if (e.status === 403) return "Only platform admins can set up payments.";
   }
   return errorMessage(e);
@@ -57,62 +80,81 @@ function setupMessage(e: unknown): string {
 
 /**
  * The one question: free, one-time or monthly (USD). A paid answer needs a
- * price and a Stripe restricted key on the platform; when there is none (or the
- * admin replaces it) a second screen asks for it — saved browser→platform
- * through the SDK hooks, never through this app's server. Save then lets
- * /api/paywall/admin/setup create the product and price and record the choice.
+ * price and a Stripe account: when the platform has none yet, the next screen
+ * is one button, Connect with Stripe (the platform's own OAuth flow; the admin
+ * signs in on Stripe and comes back here). Nothing is ever typed or copied.
+ * Save then lets /api/paywall/admin/setup create the product and price on
+ * that account and record the choice.
  */
 export function SetupScreen() {
   const router = useRouter();
-  const [tenantKey] = useState(resolveAppTenant);
-  const [screen, setScreen] = useState<"question" | "key">("question");
+  const [returned] = useState(readReturn);
+  const [screen, setScreen] = useState<Screen>("question");
   const [access, setAccess] = useState<Access | null>(null);
   const [amount, setAmount] = useState("29");
-  const [key, setKey] = useState("");
-  const [replacing, setReplacing] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<ConnectStatus | null>(null);
+  /** The overlay's message while the page is busy; "" when it is not. */
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [envOverride, setEnvOverride] = useState(false);
 
-  // Returning admins see their current answer.
+  const loadStatus = () => paywallFetch<ConnectStatus>(CONNECT_ROUTE).then(setStatus);
+
+  const save = async (chosen: Access, price: string) => {
+    const paid = chosen !== "free";
+    setBusy("Saving…");
+    setError("");
+    try {
+      await paywallFetch("/api/paywall/admin/setup", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        json: { access: chosen, ...(paid && { amount: Math.round(Number(price) * 100) }) },
+      });
+      sessionStorage.removeItem(PENDING_KEY);
+      invalidateCatalogue();
+      markSetupDone();
+      router.replace("/");
+    } catch (e) {
+      setError(setupMessage(e));
+      setBusy("");
+    }
+  };
+
+  // Returning admins see their current answer; back from Stripe, the answer
+  // they were giving (and, connected, the save they were about to make).
   useEffect(() => {
-    fetchCatalogue()
-      .then((c) => {
-        setEnvOverride(c.source === "env");
-        if (c.settings) {
-          setAccess(c.settings.access);
-          if (c.settings.amount) setAmount(String(c.settings.amount / 100));
+    const pending = returned ? readPending() : null;
+    if (pending) {
+      setAccess(pending.access);
+      setAmount(pending.amount);
+    }
+    if (returned) router.replace("/setup");
+    if (returned?.result === "error") setError(connectFailure(returned.reason));
+    void (async () => {
+      try {
+        const [catalogue] = await Promise.all([fetchCatalogue(), loadStatus()]);
+        if (!pending && catalogue.settings) {
+          setAccess(catalogue.settings.access);
+          if (catalogue.settings.amount) setAmount(String(catalogue.settings.amount / 100));
         }
-      })
-      .catch((e) => setError(errorMessage(e)));
+        if (returned?.result === "connected" && pending && pending.access !== "free")
+          await save(pending.access, pending.amount);
+      } catch (e) {
+        setError(errorMessage(e));
+      }
+    })();
+    // Once, on mount: `returned` and `router` do not change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const {
-    data: credentials = [],
-    isLoading: keyLoading,
-    refetch,
-  } = useGetMaskedIntegrationCredentialsQuery({ org: tenantKey }, { skip: !tenantKey });
-  const [createCredential] = useCreateIntegrationCredentialMutation();
-  const [updateCredential] = useUpdateIntegrationCredentialMutation();
-  const stored = credentials.find((c) => c.name === CREDENTIAL);
-
   const paid = access === "one_time" || access === "monthly";
-  const keyMissing = paid && !stored;
-  const totalSteps = keyMissing || replacing ? 2 : 1;
-  const currentStep = screen === "key" ? 2 : 1;
+  const connectMissing = paid && status?.source === null;
+  // The screens this answer still needs, in order.
+  const steps: Screen[] = ["question", ...(connectMissing ? (["connect"] as Screen[]) : [])];
+  const totalSteps = steps.length;
+  const currentStep = Math.max(steps.indexOf(screen), 0) + 1;
 
   const cents = Math.round(Number(amount) * 100);
   const priceValid = !paid || (Number.isFinite(cents) && cents > 0);
-
-  const submit = async () => {
-    await paywallFetch("/api/paywall/admin/setup", {
-      method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
-      json: { access, ...(paid && { amount: cents }) },
-    });
-    markSetupDone();
-    router.replace("/");
-  };
 
   const onQuestionSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -122,64 +164,65 @@ export function SetupScreen() {
       return;
     }
     setError("");
-    if (keyMissing) {
-      setScreen("key");
+    if (connectMissing) {
+      setScreen("connect");
       return;
     }
-    setBusy(true);
+    await save(access, amount);
+  };
+
+  const connect = async () => {
+    if (!access) return;
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ access, amount } satisfies Pending));
+    setBusy("Redirecting to Stripe…");
+    setError("");
     try {
-      await submit();
+      const { authorize_url } = await paywallFetch<{ authorize_url: string }>(CONNECT_ROUTE, {
+        method: "POST",
+        json: { return_url: `${window.location.origin}/setup` },
+      });
+      window.location.href = authorize_url;
     } catch (e) {
+      // Connected after all (another tab, an earlier round trip): go on.
+      if (e instanceof PaywallRequestError && e.status === 409) {
+        loadStatus().catch((err: unknown) => setError(setupMessage(err)));
+        await save(access, amount);
+        return;
+      }
       setError(setupMessage(e));
-    } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
 
-  const onKeySubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const value = key.trim();
-    if (!value) {
-      setError("Paste your Stripe restricted key.");
-      return;
-    }
-    setBusy(true);
+  const disconnect = async () => {
+    setBusy("Disconnecting…");
     setError("");
     try {
-      const requestBody = { name: CREDENTIAL, value: { key: value }, platform: tenantKey };
-      try {
-        await createCredential({ org: tenantKey, requestBody }).unwrap();
-      } catch (e) {
-        // The platform answers 409 when the credential exists: update in place.
-        if (errorStatus(e) === 409)
-          await updateCredential({ org: tenantKey, requestBody }).unwrap();
-        else throw new Error(credentialMessage(e));
-      }
-      setKey("");
-      setReplacing(false);
-      void refetch();
-      // A replaced key with no answer yet goes back to the question.
-      if (access) await submit();
-      else setScreen("question");
+      await paywallFetch(CONNECT_ROUTE, { method: "DELETE" });
+      await loadStatus();
     } catch (e) {
       setError(setupMessage(e));
-    } finally {
-      setBusy(false);
     }
+    setBusy("");
   };
 
   const back = () => {
     setScreen("question");
-    setReplacing(false);
     setError("");
   };
 
+  const errorLine = error && (
+    <p role="alert" className="mt-4 text-sm text-destructive">
+      {error}
+    </p>
+  );
+
   return (
     <OnboardingShell totalSteps={totalSteps} currentStep={currentStep}>
-      {/* Saving = creating the product and price, or storing the key and then
-          saving: the page is busy and nothing here should be touched. */}
-      {busy && <LoadingScreen overlay message="Saving…" />}
-      {screen === "question" ? (
+      {/* Saving = creating the product and price; redirecting = leaving for
+          Stripe: the page is busy and nothing here should be touched. */}
+      {busy && <LoadingScreen overlay message={busy} />}
+      {screen === "question" && (
         <form onSubmit={onQuestionSubmit}>
           <StepHeader
             title="How should people get in?"
@@ -237,84 +280,61 @@ export function SetupScreen() {
             </div>
           )}
 
-          {envOverride && (
-            <p className="mt-4 text-xs text-muted-foreground">
-              PAYWALL_PRICE_IDS is set on the server, so it decides what is sold until it is unset.
-            </p>
-          )}
-          {error && (
-            <p role="alert" className="mt-4 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+          {errorLine}
           <button
             type="submit"
-            disabled={!access || busy || (paid && keyLoading)}
+            disabled={!access || !!busy || (paid && !status)}
             className={`mt-6 ${onboardingPrimaryButtonClass}`}
           >
-            {busy ? "Saving..." : keyMissing ? "Continue" : "Save"}
+            {busy ? "Saving…" : connectMissing ? "Continue" : "Save"}
           </button>
-          {stored && (
+          {status?.source === "connected" && (
             <p className="mt-4 text-center text-xs text-muted-foreground">
-              Stripe key on file{" "}
-              <span className="font-mono">{maskedKeyShort(String(stored.value?.key ?? ""))}</span>
+              Stripe account connected · {status.business_name || status.email || status.account_id}
+              {status.livemode ? "" : " (test mode)"}
               {" · "}
               <button
                 type="button"
                 className="underline-offset-4 hover:underline"
-                onClick={() => {
-                  setReplacing(true);
-                  setError("");
-                  setScreen("key");
-                }}
+                onClick={disconnect}
               >
-                Replace
+                Disconnect
               </button>
             </p>
           )}
-        </form>
-      ) : (
-        <form onSubmit={onKeySubmit}>
-          <StepHeader
-            title="Monetize Your Agent"
-            subtitle="A restricted key from your Stripe account. It is stored on the platform, never in this app."
-          />
-          <div className="space-y-2">
-            <div className="flex items-center gap-1">
-              <Label htmlFor="stripe-key">Stripe Restricted Key</Label>
-              {/* The how-to lives on the label: hover, focus, or screen reader. */}
-              <CardInfoIcon
-                className="-my-1"
-                description="Visit stripe.com to get your key and securely monetize your application."
-              />
-            </div>
-            <Input
-              id="stripe-key"
-              type="password"
-              autoComplete="off"
-              placeholder="rk_…"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-            />
-          </div>
-          {error && (
-            <p role="alert" className="mt-4 text-sm text-destructive">
-              {error}
+          {status?.source === "key" && (
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              Payments use the platform’s own Stripe key (set in the OS).
             </p>
           )}
+          {status && !status.source && !status.available && (
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              Connect with Stripe is not available on this platform yet.
+            </p>
+          )}
+        </form>
+      )}
+      {screen === "connect" && (
+        <div>
+          <StepHeader
+            title="Monetize Your Agent"
+            subtitle="Connect your Stripe account. Payments go straight to it; nothing to copy."
+          />
+          {errorLine}
           <div className="mt-6 space-y-3">
             <button
-              type="submit"
-              disabled={busy || !key.trim()}
+              type="button"
+              disabled={!!busy}
               className={onboardingPrimaryButtonClass}
+              onClick={connect}
             >
-              {busy ? "Saving..." : "Save"}
+              Connect with Stripe
             </button>
             <button type="button" className={onboardingSecondaryButtonClass} onClick={back}>
               Back
             </button>
           </div>
-        </form>
+        </div>
       )}
     </OnboardingShell>
   );

@@ -29,15 +29,8 @@ import { LoadingScreen } from "@/components/loading-screen";
 import { iblaiStore } from "@/store/iblai-store";
 import { LocalStorageService } from "@/lib/iblai/storage-service";
 import config from "@/lib/iblai/config";
-import {
-  checkTenantMismatch,
-  isTenantMember,
-  paywallEntry,
-  readTenants,
-  resolveAppTenant,
-} from "@/lib/iblai/tenant";
+import { checkTenantMismatch, resolveAppTenant } from "@/lib/iblai/tenant";
 import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
-import { platformIsPaid } from "@/lib/paywall-client";
 
 const storageService = LocalStorageService.getInstance();
 
@@ -50,8 +43,6 @@ const SDK_MESSAGES = {
 /** Routes that do NOT require authentication. */
 const PUBLIC_ROUTES = new Map<RegExp, () => Promise<boolean>>([
   [new RegExp("^/sso-login"), async () => false],
-  // The join page and the checkout return: the visitor may not be signed in yet.
-  [new RegExp("^/paywall"), async () => false],
 ]);
 
 export function IblaiProviders({ children }: { children: ReactNode }) {
@@ -94,8 +85,10 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   useEffect(() => setMounted(true), []);
 
   // TenantProvider reports a user it could not place in the pinned platform
-  // through onAuthFailure and then stays in its loading state, so the message
-  // has to come from the fallback we hand it.
+  // (its self-join refused: the platform's switch closed in the OS) through
+  // onAuthFailure and then stays in its loading state, so the message has to
+  // come from the fallback we hand it. Loud on purpose: the admin's next
+  // save on /setup opens the switch again.
   const [authFailure, setAuthFailure] = useState<string | null>(null);
 
   const username = useMemo(() => {
@@ -113,27 +106,6 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   const tenantKey = useMemo(() => resolveAppTenant(), [isInitialized]);
 
   const isSsoRoute = pathname?.startsWith("/sso-login") ?? false;
-  const isPaywallRoute = pathname?.startsWith("/paywall") ?? false;
-
-  // A user the pinned platform does not know goes to the join page when joining
-  // costs money (the SDK's own answer is a logout round trip that ends on a red
-  // "no access" paragraph); everyone else goes to the login SPA as before.
-  const authRedirect = async (
-    redirectTo?: string,
-    platformKey?: string,
-    logout?: boolean,
-    saveRedirect?: boolean,
-  ) => {
-    const entry = paywallEntry({
-      member: isTenantMember(readTenants(), tenantKey),
-      paid: await platformIsPaid(),
-    });
-    if (entry) {
-      window.location.assign(entry);
-      return;
-    }
-    await redirectToAuthSpa(redirectTo, platformKey, logout, saveRedirect);
-  };
 
   const LOADING = <LoadingScreen />;
 
@@ -163,16 +135,21 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
       <ServiceWorkerProvider basePath="">
         <AuthProvider
           skip={isSsoRoute}
-          redirectToAuthSpa={authRedirect}
+          redirectToAuthSpa={redirectToAuthSpa}
           username={username}
           pathname={pathname ?? "/"}
           storageService={storageService}
           middleware={PUBLIC_ROUTES}
-          enableStorageSync
+          // The SDK's cross-SPA cookie sync serves several SPAs on one parent
+          // domain. This app is alone on its origin and pins one platform, and
+          // the sync kept bouncing to the SPA: the SSO landing's
+          // `ibl_current_tenant` cookie (the SPA's own current platform) never
+          // matches the pinned key the TenantProvider stores.
+          enableStorageSync={false}
           fallback={LOADING}
         >
           <TenantProvider
-            skip={isSsoRoute || isPaywallRoute}
+            skip={isSsoRoute}
             currentTenant={tenantKey}
             requestedTenant={tenantKey}
             saveCurrentTenant={(t: any) => {
@@ -211,7 +188,7 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
               const tenant = resolveAppTenant();
               void redirectToAuthSpa(undefined, tenant, false, true);
             }}
-            redirectToAuthSpa={authRedirect}
+            redirectToAuthSpa={redirectToAuthSpa}
             username={username}
             fallback={authFailure ? AUTH_FAILURE : LOADING}
           >

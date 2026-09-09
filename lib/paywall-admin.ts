@@ -1,8 +1,12 @@
-// lib/paywall-admin.ts — shared plumbing for the admin setup route
-// (app/api/paywall/admin/setup). Server-only. Relative imports for vitest.
+// lib/paywall-admin.ts — shared plumbing for the admin routes
+// (app/api/paywall/admin/*). Server-only. Relative imports for vitest.
 import { NextResponse } from "next/server";
-import config from "./iblai/config";
-import { PAYWALL_APP_SLUG, PaywallUpstreamError, callerFromRequest, dmJson } from "./paywall";
+import {
+  PAYWALL_APP_SLUG,
+  PaywallUpstreamError,
+  callerFromRequest,
+  openSelfJoinWith,
+} from "./paywall";
 
 export type AdminCaller = { token: string; username: string };
 
@@ -11,7 +15,7 @@ export async function adminCaller(req: Request): Promise<AdminCaller | NextRespo
   const caller = await callerFromRequest(req);
   if (!caller) return NextResponse.json({ error: "Not a platform member" }, { status: 401 });
   if (!PAYWALL_APP_SLUG)
-    return NextResponse.json({ error: "PAYWALL_APP_SLUG not set" }, { status: 500 });
+    return NextResponse.json({ error: "NEXT_PUBLIC_PAYWALL_APP_SLUG not set" }, { status: 500 });
   return { token: caller.token, username: caller.user.username };
 }
 
@@ -19,8 +23,9 @@ export const isResponse = (x: unknown): x is NextResponse => x instanceof NextRe
 
 /**
  * DM statuses pass through verbatim (403 = not a platform admin, 400 = no
- * `stripe` credential, 502 = Stripe rejected the key). Anything else is a
- * real bug: rethrow.
+ * Stripe source yet or a bad return URL, 409 = already connected, 502 =
+ * Stripe rejected the platform's credential, 503 = Connect not available on
+ * this platform's backend yet). Anything else is a real bug: rethrow.
  */
 export function failure(e: unknown): NextResponse {
   if (e instanceof PaywallUpstreamError) return NextResponse.json(e.body, { status: e.status });
@@ -28,20 +33,11 @@ export function failure(e: unknown): NextResponse {
 }
 
 /**
- * Who may join by signing in: everyone while the app is free, nobody once it
- * is paid — payment is then the only way in. The admin's own token; the DM
- * decides who may flip it.
+ * Who may join by signing in: everyone, always — membership is free here, and
+ * a payment is checked when a member sends. The admin's own token; the DM
+ * decides who may flip the switch.
  */
-export async function setSelfJoin(token: string, allow: boolean): Promise<void> {
-  await dmJson(
-    await fetch(`${config.dmUrl()}/api/core/users/platforms/config/`, {
-      method: "POST",
-      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ platform_key: config.mainTenantKey(), allow_self_linking: allow }),
-      cache: "no-store",
-    }),
-  );
-}
+export const openSelfJoin = (token: string) => openSelfJoinWith(`Token ${token}`);
 
 /** Parse a JSON body; garbage is an empty object, so field checks 400 instead of crashing. */
 export async function jsonBody(req: Request): Promise<Record<string, unknown>> {

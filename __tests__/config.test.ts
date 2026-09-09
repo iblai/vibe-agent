@@ -14,7 +14,7 @@ const ENV_KEYS = [
   "NEXT_PUBLIC_AUTH_URL",
   "NEXT_PUBLIC_LEGACY_LMS_URL",
   "NEXT_PUBLIC_MFE_URL",
-  "IBLAI_API_KEY",
+  "NEXT_PUBLIC_PAYWALL_APP_SLUG",
 ] as const;
 
 const saved: Record<string, string | undefined> = {};
@@ -80,15 +80,11 @@ describe("hosted defaults in code", () => {
   });
 });
 
-describe("apiKey", () => {
-  it("returns IBLAI_API_KEY on the server", async () => {
-    process.env.IBLAI_API_KEY = "test-token";
-    const config = await loadConfig();
-    expect(config.apiKey()).toBe("test-token");
-  });
-
-  it("returns an empty string when unset", async () => {
-    const config = await loadConfig();
-    expect(config.apiKey()).toBe("");
+describe("paywallAppSlug", () => {
+  it("reads NEXT_PUBLIC_PAYWALL_APP_SLUG, empty when unset", async () => {
+    expect((await loadConfig()).paywallAppSlug()).toBe("");
+    process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "demo-app";
+    vi.resetModules();
+    expect((await loadConfig()).paywallAppSlug()).toBe("demo-app");
   });
 });

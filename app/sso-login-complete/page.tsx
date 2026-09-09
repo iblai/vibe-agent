@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 
 import { SsoLogin } from "@iblai/iblai-js/web-containers/next";
+import { LoadingScreen } from "@/components/loading-screen";
 
 /**
  * SSO Login Complete page.
@@ -12,8 +13,11 @@ import { SsoLogin } from "@iblai/iblai-js/web-containers/next";
  * stores them in localStorage, and redirects to the saved return path.
  */
 export default function SsoLoginCompletePage() {
+  // SsoLogin renders nothing while it stores the tokens and leaves for `/`:
+  // the one loading screen covers that moment, as it does everywhere else.
   return (
-    <Suspense fallback={<div>Completing login…</div>}>
+    <Suspense fallback={<LoadingScreen />}>
+      <LoadingScreen />
       <SsoLogin
         localStorageKeys={{
           CURRENT_TENANT: "current_tenant",

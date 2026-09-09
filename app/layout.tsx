@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { IblaiProviders } from "@/providers/iblai-providers";
 import config from "@/lib/iblai/config";
-import { apiKeyVerdict } from "@/lib/paywall";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,25 +33,15 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Server-side, before anything else: no app at all without a real
-  // IBLAI_API_KEY for this platform (empty, placeholder, rejected, or another
-  // platform's key). The same alert as a missing platform key, on every route.
-  const problem = await apiKeyVerdict();
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        {problem ? (
-          <p role="alert" className="p-8 text-sm text-destructive">
-            {problem}
-          </p>
-        ) : (
-          <IblaiProviders>{children}</IblaiProviders>
-        )}
+        <IblaiProviders>{children}</IblaiProviders>
       </body>
     </html>
   );

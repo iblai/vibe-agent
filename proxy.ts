@@ -15,6 +15,12 @@ export function proxy(request: NextRequest) {
   return applyCsp(request, {
     requestHeaders,
     mode: process.env.NODE_ENV === "development" ? "report-only" : undefined,
+    // Stripe's embedded checkout in the pay modal: the SDK defaults allow
+    // js.stripe.com, api.stripe.com and hooks.stripe.com; the checkout adds these.
+    scriptSrc: ["https://checkout.stripe.com"],
+    connectSrc: ["https://checkout.stripe.com"],
+    frameSrc: ["https://checkout.stripe.com"],
+    imgSrc: ["https://*.stripe.com"],
   });
 }
 

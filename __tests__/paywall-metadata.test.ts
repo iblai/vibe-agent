@@ -4,17 +4,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
  * The app's paywall choice lives in the platform's PUBLIC metadata
  * (apps.<slug>). These tests pin: the read needs no credential and is cached;
  * the write is one deep-merge PUT with the admin's own token and every key
- * present; env > metadata > nothing when resolving what is for sale; and
- * upstream refusals pass through instead of turning into a silent "free".
+ * present — the Stripe source's public values included — carrying the login
+ * SPA's branding key beside the choice; and upstream refusals pass through
+ * instead of being swallowed.
  */
 
 const ENV_KEYS = [
   "NEXT_PUBLIC_API_BASE_URL",
   "NEXT_PUBLIC_PLATFORM_BASE_DOMAIN",
   "NEXT_PUBLIC_MAIN_TENANT_KEY",
-  "IBLAI_API_KEY",
-  "PAYWALL_APP_SLUG",
-  "PAYWALL_PRICE_IDS",
+  "NEXT_PUBLIC_PAYWALL_APP_SLUG",
+  "NEXT_PUBLIC_APP_NAME",
 ] as const;
 
 const saved: Record<string, string | undefined> = {};
@@ -29,7 +29,12 @@ const info = (over: Record<string, unknown> = {}) => ({
   access: "monthly",
   amount: 2900,
   currency: "usd",
-  stripe: { product_id: "prod_1", price_id: "price_1" },
+  stripe: {
+    product_id: "prod_1",
+    price_id: "price_1",
+    publishable_key: "pk_test_platform",
+    stripe_account: "acct_1",
+  },
   updated_at: "2026-09-04T00:00:00.000Z",
   updated_by: "jane",
   ...over,
@@ -46,8 +51,7 @@ beforeEach(() => {
   }
   process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.edu";
   process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "testorg";
-  process.env.IBLAI_API_KEY = "platform-key";
-  process.env.PAYWALL_APP_SLUG = "demo-app";
+  process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "demo-app";
 });
 
 afterEach(() => {
@@ -87,7 +91,7 @@ describe("readAppPaymentInfo", () => {
 });
 
 describe("writeAppPaymentInfo", () => {
-  it("PUTs one deep-merge body with the admin's own token and drops the read cache", async () => {
+  it("PUTs one deep-merge body — the choice and the login branding — with the admin's own token and drops the read cache", async () => {
     let stored: Record<string, unknown> = {};
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       if (init?.method === "PUT") {
@@ -100,7 +104,7 @@ describe("writeAppPaymentInfo", () => {
     const { readAppPaymentInfo, writeAppPaymentInfo } = await loadPaywall();
 
     expect((await readAppPaymentInfo()).info).toBeNull();
-    await writeAppPaymentInfo("dm-abc", info() as never);
+    await writeAppPaymentInfo("dm-abc", info() as never, "Acme");
     expect((await readAppPaymentInfo()).info).toEqual(info());
 
     const [putUrl, putInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT") as [
@@ -110,7 +114,16 @@ describe("writeAppPaymentInfo", () => {
     expect(putUrl).toBe(META_URL);
     expect((putInit.headers as Record<string, string>).Authorization).toBe("Token dm-abc");
     expect(JSON.parse(putInit.body as string)).toEqual({
-      metadata: { apps: { "demo-app": info() } },
+      metadata: {
+        apps: { "demo-app": info() },
+        // What login.iblai.app shows for the platform: the app's name (env,
+        // else the platform's) and the price line.
+        auth_web_mentorai: {
+          title: "Acme",
+          display_title_info: "Acme",
+          display_description_info: "$29/month",
+        },
+      },
     });
   });
 
@@ -122,134 +135,8 @@ describe("writeAppPaymentInfo", () => {
       ),
     );
     const { writeAppPaymentInfo, PaywallUpstreamError } = await loadPaywall();
-    await expect(writeAppPaymentInfo("dm-abc", info() as never)).rejects.toBeInstanceOf(
+    await expect(writeAppPaymentInfo("dm-abc", info() as never, "Acme")).rejects.toBeInstanceOf(
       PaywallUpstreamError,
     );
-  });
-});
-
-describe("resolveCatalogue / allowedPriceIds", () => {
-  it("is undecided and free when the platform has no entry", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async () => metadataResponse({})),
-    );
-    const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-    expect(await resolveCatalogue()).toEqual({
-      paywall: false,
-      decided: false,
-      source: "none",
-      platformName: "Acme",
-      prices: [],
-      settings: null,
-    });
-    expect(await allowedPriceIds()).toEqual([]);
-  });
-
-  it("is decided and free for a free choice", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async () =>
-        metadataResponse({
-          "demo-app": info({
-            access: "free",
-            amount: null,
-            currency: null,
-            stripe: { product_id: "prod_1", price_id: null },
-          }),
-        }),
-      ),
-    );
-    const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-    expect(await resolveCatalogue()).toMatchObject({
-      paywall: false,
-      decided: true,
-      source: "metadata",
-      prices: [],
-      settings: { access: "free", amount: null },
-    });
-    expect(await allowedPriceIds()).toEqual([]);
-  });
-
-  it("sells the one chosen price for a paid choice, with display data from the metadata", async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () => metadataResponse({ "demo-app": info() }));
-    vi.stubGlobal("fetch", fetchMock);
-    const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-    expect(await resolveCatalogue()).toEqual({
-      paywall: true,
-      decided: true,
-      source: "metadata",
-      platformName: "Acme",
-      prices: [
-        {
-          id: "price_1",
-          productId: "prod_1",
-          name: "Monthly access",
-          unitAmount: 2900,
-          currency: "usd",
-          interval: "month",
-        },
-      ],
-      settings: { access: "monthly", amount: 2900 },
-    });
-    expect(await allowedPriceIds()).toEqual(["price_1"]);
-    // No Stripe call: the metadata carries what the page shows.
-    expect(fetchMock.mock.calls.every(([url]) => url === META_URL)).toBe(true);
-  });
-
-  it("lets PAYWALL_PRICE_IDS win, describing each id with one cached Stripe retrieve", async () => {
-    process.env.PAYWALL_PRICE_IDS = "price_env";
-    const fetchMock = vi.fn<typeof fetch>(async (input) => {
-      const url = input as string;
-      if (url === META_URL) return metadataResponse({ "demo-app": info({ access: "free" }) });
-      // The org-wide key names its owner, the member whose path the lookup runs on.
-      if (url.endsWith("/api/core/token/verify/"))
-        return Response.json({ user_id: 1, username: "owner", email: "owner@x.io" });
-      return Response.json({
-        id: "price_env",
-        nickname: "",
-        unit_amount: 500,
-        currency: "usd",
-        recurring: null,
-        product: { id: "prod_9", name: "Day pass" },
-      });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const { resolveCatalogue, allowedPriceIds } = await loadPaywall();
-
-    expect(await allowedPriceIds()).toEqual(["price_env"]);
-    const first = await resolveCatalogue();
-    const second = await resolveCatalogue();
-    expect(first).toMatchObject({
-      paywall: true,
-      decided: true,
-      source: "env",
-      prices: [
-        { id: "price_env", productId: "prod_9", name: "Day pass", unitAmount: 500, interval: null },
-      ],
-    });
-    expect(second).toEqual(first);
-    const stripeCalls = fetchMock.mock.calls.filter(
-      ([url]) => url !== META_URL && !String(url).endsWith("/api/core/token/verify/"),
-    );
-    expect(stripeCalls).toHaveLength(1);
-    expect(stripeCalls[0][0]).toBe(
-      "https://api.example.edu/dm/api/ai-mentor/orgs/testorg" +
-        "/users/owner/providers/stripe/payments/prices/price_env/?expand[]=product",
-    );
-    // Display lookups run as the platform: the org-wide key, never a user token.
-    expect(
-      ((stripeCalls[0][1] as RequestInit).headers as Record<string, string>).Authorization,
-    ).toBe("Api-Token platform-key");
-  });
-
-  it("passes the DM's refusal through instead of pretending the app is free", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async () => Response.json({ detail: "Not found." }, { status: 404 })),
-    );
-    const { resolveCatalogue, allowedPriceIds, PaywallUpstreamError } = await loadPaywall();
-    await expect(resolveCatalogue()).rejects.toBeInstanceOf(PaywallUpstreamError);
-    await expect(allowedPriceIds()).rejects.toMatchObject({ status: 404 });
   });
 });

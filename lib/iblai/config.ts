@@ -3,8 +3,9 @@
  *
  * Hosted-iblai.app defaults live in code: with no env vars at all, every
  * service routes through https://api.iblai.app. `.env.local` (copied from
- * `.env.example`) holds the platform key, IBLAI_API_KEY, and any self-hosted
- * overrides.
+ * `.env.example`) holds the platform key, the agent, the app's name and any
+ * self-hosted overrides. Nothing in it is a secret: the app holds no platform
+ * key of its own.
  *
  * Supports two modes:
  *   1. Consolidated API (default on hosted iblai.app): NEXT_PUBLIC_API_BASE_URL
@@ -35,6 +36,7 @@ const env = {
   NEXT_PUBLIC_SUPPORT_EMAIL: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
   NEXT_PUBLIC_SHOW_ABOUT: process.env.NEXT_PUBLIC_SHOW_ABOUT,
   NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
+  NEXT_PUBLIC_PAYWALL_APP_SLUG: process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG,
 };
 
 declare global {
@@ -106,15 +108,11 @@ const config = {
   // platform's own name is never used for it.
   appName: () => getEnv("NEXT_PUBLIC_APP_NAME", ""),
   platformBaseDomain: () => domain(),
-
-  // Server-only: IBLAI_API_KEY is a secret and not NEXT_PUBLIC_*, so Next.js
-  // never inlines it into the client bundle — in the browser this returns "".
-  // Use it from route handlers / server components for platform API calls
-  // (`Authorization: Api-Token <key>`; on the OpenAI-compatible endpoints,
-  // `https://asgi.data.<domain>/api/ai-mentor/orgs/<platform-key>/v1/*`, the same
-  // key is also a standard OpenAI `Bearer` api key). Deliberately not routed
-  // through getEnv/window.__ENV__, which are client-visible.
-  apiKey: () => process.env.IBLAI_API_KEY ?? "",
+  // What this app is called on the platform: the Stripe product's
+  // `metadata.app` tag (the platform's checkout rule) and the key under
+  // `apps.<slug>` in the platform's public metadata, where the paywall choice
+  // is recorded. The browser and the admin routes read the same value.
+  paywallAppSlug: () => getEnv("NEXT_PUBLIC_PAYWALL_APP_SLUG", ""),
 };
 
 export default config;

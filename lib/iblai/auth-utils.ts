@@ -35,21 +35,37 @@ function getRedirectOrigin(): string {
 
 /**
  * The Auth SPA's login URL that comes back to {origin}/sso-login-complete,
- * scoped to {tenant} when given; with {email} the SPA skips its form and mails
- * that address a sign-in code.
+ * always scoped to the app's platform (NEXT_PUBLIC_MAIN_TENANT_KEY): the SPA
+ * brands its screens from that platform's metadata, and a member of it lands
+ * on it. A non-member's login reaches the SPA's completion step without the
+ * tenant (the SPA drops it on that hop), so the SPA never tries to join
+ * them; the SDK `TenantProvider` self-joins them on arrival (every setup
+ * save opens the platform's self-join switch).
+ *
+ * `enforce-login=1` is the SPA's own "the form, fresh session" switch (it
+ * uses it after creating an organisation). Without it, a `tenant=` on the
+ * URL makes the SPA's login page look the platform's SSO login URL up once
+ * its custom-domain check on `redirect-to` settles — after it has already
+ * rendered the form — so the form gives way to a spinner and comes back: a
+ * flicker on every arrival. The price: the SPA drops its own session on
+ * arrival, so someone signed in to another ibl.ai app in this browser types
+ * their credentials once instead of being passed through.
  */
-export const authLoginUrl = (origin: string, tenant: string, email = "") =>
-  `${config.authUrl()}/login?app=custom&redirect-to=${origin}` +
-  (tenant ? `&tenant=${encodeURIComponent(tenant)}` : "") +
-  (email ? `&email=${encodeURIComponent(email)}` : "");
+export const authLoginUrl = (origin: string) =>
+  `${config.authUrl()}/login?app=custom&redirect-to=${origin}&tenant=${encodeURIComponent(resolveAppTenant())}&enforce-login=1`;
 
 /** Where SsoLogin sends the browser once the Auth SPA returns (the key it reads, then clears). */
 export const saveReturnPath = (path: string) => localStorage.setItem("redirectTo", path);
 
-/** Redirect the browser to the ibl.ai Auth SPA for login. */
+/**
+ * Redirect the browser to the ibl.ai Auth SPA for login. The SDK passes a
+ * platform key of its own on some paths (`platformKey`); this app has one
+ * platform, so the URL always carries the env key and that argument is
+ * ignored.
+ */
 export async function redirectToAuthSpa(
   redirectTo?: string,
-  platformKey?: string,
+  _platformKey?: string,
   logout?: boolean,
   saveRedirect?: boolean,
 ) {
@@ -58,7 +74,7 @@ export async function redirectToAuthSpa(
 
   if (saveRedirect) saveReturnPath(path);
 
-  let authUrl = authLoginUrl(redirectOrigin, platformKey || resolveAppTenant());
+  let authUrl = authLoginUrl(redirectOrigin);
   if (logout) authUrl += "&logout=1";
 
   // All platforms (web, desktop Tauri, mobile Tauri): navigate the window
@@ -66,15 +82,6 @@ export async function redirectToAuthSpa(
   // the Rust on_navigation filter opens OAuth providers (Google, Apple)
   // in a popup window automatically.
   window.location.href = authUrl;
-}
-
-/** A DM token the paywall routes will accept: present and not past its expiry. */
-export function hasLiveDmToken(): boolean {
-  if (typeof window === "undefined") return false;
-  const token = localStorage.getItem("dm_token");
-  if (!token) return false;
-  const expiry = localStorage.getItem("dm_token_expires");
-  return !expiry || new Date(expiry) > new Date();
 }
 
 /** Check whether a non-expired auth token exists in localStorage. */
@@ -87,10 +94,13 @@ export function hasNonExpiredAuthToken(): boolean {
   return new Date(expiry) > new Date();
 }
 
-/** Handle logout: clear state and redirect to the Auth SPA logout page. */
+/**
+ * Sign out: clear the app's state and go straight to the login form. The
+ * SPA's login page logs its own session out on `enforce-login` exactly as
+ * its /logout page does, and that page would only send the browser back
+ * here to be bounced to the form: three page loads for one.
+ */
 export function handleLogout() {
-  const tenant = resolveAppTenant();
-  const redirectOrigin = getRedirectOrigin();
   localStorage.clear();
-  window.location.href = `${config.authUrl()}/logout?redirect-to=${redirectOrigin}&tenant=${encodeURIComponent(tenant)}`;
+  window.location.href = authLoginUrl(getRedirectOrigin());
 }
