@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0](https://github.com/iblai/vibe-agent/compare/v1.6.0...v1.7.0) (2026-09-09)
+
+### Features
+
+* **setup:** Reconnect Stripe; refuse a paid plan without a publishable key; tolerate a gone price ([2029093](https://github.com/iblai/vibe-agent/commit/2029093a7a2f8db38d989ec75b4d471c2485bd07))
+
 ## [1.6.0](https://github.com/iblai/vibe-agent/compare/v1.5.0...v1.6.0) (2026-09-09)
 
 ### Features
