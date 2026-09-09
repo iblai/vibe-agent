@@ -171,9 +171,10 @@ export function SetupScreen() {
     await save(access, amount);
   };
 
-  const connect = async () => {
-    if (!access) return;
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ access, amount } satisfies Pending));
+  /** Leave for Stripe's consent page; an answer in progress rides along for the return. */
+  const startConnect = async () => {
+    if (access)
+      sessionStorage.setItem(PENDING_KEY, JSON.stringify({ access, amount } satisfies Pending));
     setBusy("Redirecting to Stripe…");
     setError("");
     try {
@@ -186,13 +187,21 @@ export function SetupScreen() {
       // Connected after all (another tab, an earlier round trip): go on.
       if (e instanceof PaywallRequestError && e.status === 409) {
         loadStatus().catch((err: unknown) => setError(setupMessage(err)));
-        await save(access, amount);
+        if (access) await save(access, amount);
         return;
       }
       setError(setupMessage(e));
+      // A reconnect has already disconnected by now: show where things stand.
+      loadStatus().catch(() => {});
       setBusy("");
     }
   };
+
+  /** The platform's 502 on a disconnect means Stripe could not confirm it: still connected. */
+  const disconnectMessage = (e: unknown) =>
+    e instanceof PaywallRequestError && e.status === 502
+      ? "Stripe could not be reached; the account is still connected. Try again."
+      : setupMessage(e);
 
   const disconnect = async () => {
     setBusy("Disconnecting…");
@@ -201,9 +210,27 @@ export function SetupScreen() {
       await paywallFetch(CONNECT_ROUTE, { method: "DELETE" });
       await loadStatus();
     } catch (e) {
-      setError(setupMessage(e));
+      setError(disconnectMessage(e));
     }
     setBusy("");
+  };
+
+  /**
+   * Another Stripe account (or the same one after revoking ibl.ai on Stripe):
+   * disconnect, then the same round trip as Connect with Stripe; the return
+   * re-saves a paid answer on the new account.
+   */
+  const reconnect = async () => {
+    setBusy("Redirecting to Stripe…");
+    setError("");
+    try {
+      await paywallFetch(CONNECT_ROUTE, { method: "DELETE" });
+    } catch (e) {
+      setError(disconnectMessage(e));
+      setBusy("");
+      return;
+    }
+    await startConnect();
   };
 
   const back = () => {
@@ -296,6 +323,14 @@ export function SetupScreen() {
               <button
                 type="button"
                 className="underline-offset-4 hover:underline"
+                onClick={reconnect}
+              >
+                Reconnect
+              </button>
+              {" · "}
+              <button
+                type="button"
+                className="underline-offset-4 hover:underline"
                 onClick={disconnect}
               >
                 Disconnect
@@ -326,7 +361,7 @@ export function SetupScreen() {
               type="button"
               disabled={!!busy}
               className={onboardingPrimaryButtonClass}
-              onClick={connect}
+              onClick={startConnect}
             >
               Connect with Stripe
             </button>

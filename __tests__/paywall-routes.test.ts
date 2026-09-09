@@ -404,6 +404,44 @@ describe("POST /api/paywall/admin/setup", () => {
     });
   });
 
+  it("saves after a reconnect to another Stripe account: the old price's 404 is not an error", async () => {
+    stubFetch({
+      apps: { "demo-app": monthly({ stripe: { product_id: "prod_old", price_id: "price_old" } }) },
+      dm: (url, init) =>
+        url.endsWith("/prices/price_old/") || url.endsWith("/products/prod_old/")
+          ? Response.json(
+              { error: "No such price: 'price_old'", code: "resource_missing" },
+              { status: 404 },
+            )
+          : Response.json(
+              init?.method === "POST" && url.endsWith("/products/")
+                ? { id: "prod_new" }
+                : { id: "price_new" },
+            ),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "monthly", amount: 100 }));
+    expect(res.status).toBe(200);
+    expect(metaWrites[0].body.metadata.apps["demo-app"].stripe).toMatchObject({
+      product_id: "prod_new",
+      price_id: "price_new",
+    });
+  });
+
+  it("still fails the save when retiring the old price fails for any other reason", async () => {
+    stubFetch({
+      apps: { "demo-app": monthly({ stripe: { product_id: "prod_1", price_id: "price_1" } }) },
+      dm: (url) =>
+        url.endsWith("/prices/price_1/")
+          ? Response.json({ error: "Stripe is unreachable or failing" }, { status: 502 })
+          : Response.json({ id: "x" }),
+    });
+    const { POST } = await loadSetup();
+    const res = await POST(post({ access: "monthly", amount: 100 }));
+    expect(res.status).toBe(502);
+    expect(metaWrites).toHaveLength(0);
+  });
+
   it("records the tenant's own publishable key and no account when the platform runs on a pasted key", async () => {
     stubFetch({
       connect: () => Response.json(OWN_KEY),
@@ -431,6 +469,22 @@ describe("POST /api/paywall/admin/setup", () => {
     expect(dmCalls).toHaveLength(0);
     expect(configWrites).toHaveLength(0);
     expect(metaWrites).toHaveLength(0);
+  });
+
+  it("400s a paid answer while the Stripe source has no publishable key, naming the fix", async () => {
+    for (const [source, fix] of [
+      [{ ...CONNECTED, publishable_key: "" }, "contact ibl.ai support"],
+      [{ ...OWN_KEY, publishable_key: "" }, "Stripe credential in the OS"],
+    ] as const) {
+      stubFetch({ connect: () => Response.json(source), dm: stripeDm({}) });
+      const { POST } = await loadSetup();
+      const res = await POST(post({ access: "one_time", amount: 500 }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toContain(fix);
+      expect(dmCalls).toHaveLength(0);
+      expect(configWrites).toHaveLength(0);
+      expect(metaWrites).toHaveLength(0);
+    }
   });
 
   it("passes the platform's 403 through (not an admin) and records nothing", async () => {

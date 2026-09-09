@@ -28,8 +28,10 @@ import {
  * The whole paywall setup in one call: free, one-time or monthly (USD).
  * Every platform call carries the admin's OWN token, so the DM decides who may
  * do this (403 otherwise). Paid order: ask the platform which Stripe source it
- * runs on (a connected account, or a pasted key; none → 400, nothing touched)
- * → retire the previous price → make sure there is a product tagged for this
+ * runs on (a connected account, or a pasted key; none, or one without a
+ * publishable key → 400, nothing touched) → retire the previous price (a 404
+ * is nothing to retire: after a reconnect it lives on another account) → make
+ * sure there is a product tagged for this
  * app → create the price → record the choice, with that source's publishable
  * key and account, in the platform metadata. Free makes ZERO Stripe or
  * connect calls, ever — it only records the choice — because free must never
@@ -69,6 +71,18 @@ export async function POST(req: NextRequest) {
       : null;
     if (paid && !source?.source)
       return NextResponse.json({ error: "Connect a Stripe account first" }, { status: 400 });
+    // Embedded checkout renders with the source's publishable key: recording a
+    // paid plan without one would let every member's checkout fail instead.
+    if (paid && !source.publishable_key)
+      return NextResponse.json(
+        {
+          error:
+            source.source === "key"
+              ? "Add the publishable key (pk_…) to the platform’s Stripe credential in the OS, then save again."
+              : "The platform’s backend has no publishable key for connected accounts yet; contact ibl.ai support.",
+        },
+        { status: 400 },
+      );
     let productId = current?.stripe.product_id ?? null;
     let priceId: string | null = null;
 
@@ -77,12 +91,19 @@ export async function POST(req: NextRequest) {
       //    the platform's Stripe source, which free must never require. A price left
       //    behind by a paid → free switch stays active on Stripe but is never
       //    sold — the app sells only the recorded price_id (null for free).
-      if (current?.stripe.price_id)
-        await stripe(`/prices/${encodeURIComponent(current.stripe.price_id)}/`, {
-          method: "POST",
-          headers: idem("archive"),
-          body: JSON.stringify({ active: false }),
-        });
+      if (current?.stripe.price_id) {
+        try {
+          await stripe(`/prices/${encodeURIComponent(current.stripe.price_id)}/`, {
+            method: "POST",
+            headers: idem("archive"),
+            body: JSON.stringify({ active: false }),
+          });
+        } catch (e) {
+          // Gone (another Stripe account after a reconnect, or deleted):
+          // nothing to retire. Anything else is real.
+          if (!(e instanceof PaywallUpstreamError && e.status === 404)) throw e;
+        }
+      }
       // 2. The product: reuse ours while it is still active and tagged, else create
       //    (named after the app — what the Stripe Checkout page shows — else the platform).
       if (productId) {
