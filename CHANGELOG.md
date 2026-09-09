@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.0](https://github.com/iblai/vibe-agent/compare/v1.5.0...v1.6.0) (2026-09-09)
+
+### Features
+
+* connect with stripe in setup, pay in the modal on the buyer's own token, no platform key ([51f360a](https://github.com/iblai/vibe-agent/commit/51f360af30ad4de97cdfec42682f8c88a0ee16e9))
+
 ## [1.5.0](https://github.com/iblai/vibe-agent/compare/v1.4.1...v1.5.0) (2026-09-07)
 
 ### Features
