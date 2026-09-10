@@ -178,7 +178,12 @@ export const planName = (access: Access) =>
 
 const metadataUrl = () => `${config.dmUrl()}/api/core/orgs/${config.mainTenantKey()}/metadata/`;
 
-type InfoRead = { info: AppPaymentInfo | null; platformName: string };
+type InfoRead = {
+  info: AppPaymentInfo | null;
+  platformName: string;
+  /** The platform's own sign-in copy, which this app preserves. */
+  branding: LoginBranding;
+};
 
 // ponytail: 60s cache per lambda; the setup route invalidates after writing.
 let infoCache: (InfoRead & { at: number }) | null = null;
@@ -199,10 +204,14 @@ export async function readAppPaymentInfo(): Promise<InfoRead> {
   if (infoCache && Date.now() - infoCache.at < INFO_TTL_MS) return infoCache;
   const body = await dmJson(await fetch(metadataUrl(), { cache: "no-store" }));
   const raw = body?.metadata?.apps?.[PAYWALL_APP_SLUG];
+  const branding = body?.metadata?.[LOGIN_BRANDING_KEY];
   infoCache = {
     at: Date.now(),
     info: isPaymentInfo(raw) ? raw : null,
     platformName: String(body?.platform_name ?? ""),
+    // The same read carries the platform's branding; the write needs it to
+    // leave the platform's own words alone.
+    branding: branding && typeof branding === "object" ? branding : {},
   };
   return infoCache;
 }
@@ -230,20 +239,65 @@ export function priceLine(info: AppPaymentInfo): string {
  */
 export const LOGIN_BRANDING_KEY = "auth_web_mentorai";
 
-export function loginBranding(info: AppPaymentInfo, platformName: string) {
-  const title = config.appName() || platformName;
-  return { title, display_title_info: title, display_description_info: priceLine(info) };
+/** The three fields of the sign-in copy this app can touch. */
+export type LoginBranding = {
+  title?: string;
+  display_title_info?: string;
+  display_description_info?: string;
+};
+
+/** What separates the platform's own line from the price this app appends. */
+const PRICE_SEPARATOR = " · ";
+/** Exactly what priceLine() can produce: Free, $49, $29.90, and the monthly forms. */
+const PRICE_LINE = /^(Free|\$\d[\d,]*(\.\d{2})?(\/month)?)$/;
+
+/**
+ * The platform's own description, with a price this app appended previously
+ * taken back off, so saving twice never stacks two prices. A description that
+ * is nothing but a price was written by this app before it learned to append
+ * (or by an older release), so it counts as ours and goes.
+ */
+export function descriptionWithoutPrice(text: unknown): string {
+  const line = typeof text === "string" ? text.trim() : "";
+  if (!line || PRICE_LINE.test(line)) return "";
+  const cut = line.lastIndexOf(PRICE_SEPARATOR);
+  if (cut < 0) return line;
+  const tail = line.slice(cut + PRICE_SEPARATOR.length).trim();
+  return PRICE_LINE.test(tail) ? line.slice(0, cut).trim() : line;
+}
+
+/**
+ * The branding to PUT beside the choice. The platform's title and heading are
+ * never edited — they are written only when it has none, so a fresh platform
+ * is not blank — and the price joins its description rather than replacing it.
+ * The DM merges, so a field left out here keeps whatever is stored.
+ */
+export function loginBranding(
+  info: AppPaymentInfo,
+  platformName: string,
+  existing: LoginBranding = {},
+): LoginBranding {
+  const name = config.appName() || platformName;
+  const price = priceLine(info);
+  const said = descriptionWithoutPrice(existing.display_description_info);
+  return {
+    ...(existing.title ? {} : { title: name }),
+    ...(existing.display_title_info ? {} : { display_title_info: name }),
+    display_description_info: said ? `${said}${PRICE_SEPARATOR}${price}` : price,
+  };
 }
 
 /**
  * Write apps.<slug> and the login branding as the admin (their own token;
  * the DM checks the role). One deep-merge PUT: the platform's other keys
- * under the branding key (logo, images) survive.
+ * under the branding key (logo, images) survive, and so does everything it
+ * already says — {existing} is what the platform's sign-in copy reads now.
  */
 export async function writeAppPaymentInfo(
   token: string,
   info: AppPaymentInfo,
   platformName: string,
+  existing: LoginBranding = {},
 ): Promise<void> {
   await dmJson(
     await fetch(metadataUrl(), {
@@ -252,7 +306,7 @@ export async function writeAppPaymentInfo(
       body: JSON.stringify({
         metadata: {
           apps: { [PAYWALL_APP_SLUG]: info },
-          [LOGIN_BRANDING_KEY]: loginBranding(info, platformName),
+          [LOGIN_BRANDING_KEY]: loginBranding(info, platformName, existing),
         },
       }),
       cache: "no-store",

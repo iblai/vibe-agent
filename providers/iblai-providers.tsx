@@ -31,6 +31,7 @@ import { LocalStorageService } from "@/lib/iblai/storage-service";
 import config from "@/lib/iblai/config";
 import { checkTenantMismatch, resolveAppTenant } from "@/lib/iblai/tenant";
 import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
+import { mintPlatformTokens, saveTokens } from "@/lib/iblai/tokens";
 
 const storageService = LocalStorageService.getInstance();
 
@@ -84,11 +85,15 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // TenantProvider reports a user it could not place in the pinned platform
-  // (its self-join refused: the platform's switch closed in the OS) through
-  // onAuthFailure and then stays in its loading state, so the message has to
-  // come from the fallback we hand it. Loud on purpose: the admin's next
-  // save on /setup opens the switch again.
+  // Nobody should arrive here as a non-member: every sign-in goes through
+  // the SPA's join page, which links the account to the platform first
+  // (lib/iblai/auth-utils.ts). TenantProvider's own self-join is the
+  // backstop; a user it still cannot place is sent back to the join page by
+  // its redirect, and only the platform's switch closed in the OS returns
+  // one anyway (the SPA ends on its own 403 page). That last case comes
+  // through onAuthFailure while the provider stays in its loading state, so
+  // the message has to come from the fallback we hand it. Loud on purpose:
+  // the admin's next save on /setup opens the switch again.
   const [authFailure, setAuthFailure] = useState<string | null>(null);
 
   const username = useMemo(() => {
@@ -162,23 +167,22 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
               checkTenantMismatch();
             }}
             saveUserTenants={(t: unknown) => localStorage.setItem("tenants", JSON.stringify(t))}
-            // TenantProvider re-authenticates against the requested platform and
-            // hands back a fresh, platform-scoped token pair. Without persisting it
-            // the next membership check still runs on the pre-switch tokens, so
-            // the provider loops on
+            // The platform-scoped token pair TenantProvider hands back when it
+            // switches platforms itself. Without persisting it the next
+            // membership check still runs on the pre-switch tokens, so the
+            // provider loops on
             //   "User still does not belong to tenant after re-auth"
             // and the app never leaves its loading state. iblai/os wires these up
             // (providers/index.tsx -> saveUserTokens).
-            saveUserTokens={(tokens: TokenResponse) => {
-              if (tokens?.axd_token) {
-                localStorage.setItem("axd_token", tokens.axd_token.token);
-                localStorage.setItem("axd_token_expires", tokens.axd_token.expires);
-              }
-              if (tokens?.dm_token) {
-                localStorage.setItem("dm_token", tokens.dm_token.token);
-                localStorage.setItem("dm_token_expires", tokens.dm_token.expires);
-              }
-            }}
+            saveUserTokens={(tokens: TokenResponse) => saveTokens(tokens)}
+            // The SDK self-joined a member (its backstop; normally the login
+            // SPA's join page has already linked them). It keeps the tokens
+            // they arrived with, which were minted for the platform they came
+            // from, and the platform's paywall refuses a call on this
+            // platform's path with one of those. Mint this platform's own
+            // pair now — the SDK does not wait for this, and the rails read
+            // the stored token when they run.
+            onAutoJoinUserToTenant={() => void mintPlatformTokens()}
             saveTenant={(t: string) => localStorage.setItem("tenant", t)}
             onAuthFailure={(reason: string) => {
               console.error("[TenantProvider] Auth failure:", reason);

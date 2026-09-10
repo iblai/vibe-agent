@@ -5,8 +5,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
  * (apps.<slug>). These tests pin: the read needs no credential and is cached;
  * the write is one deep-merge PUT with the admin's own token and every key
  * present — the Stripe source's public values included — carrying the login
- * SPA's branding key beside the choice; and upstream refusals pass through
- * instead of being swallowed.
+ * SPA's branding key beside the choice, where it appends the price to what
+ * the platform already says and edits neither its title nor its heading; and
+ * upstream refusals pass through instead of being swallowed.
  */
 
 const ENV_KEYS = [
@@ -40,8 +41,12 @@ const info = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const metadataResponse = (apps: Record<string, unknown>) =>
-  Response.json({ platform_key: "testorg", platform_name: "Acme", metadata: { apps, theme: "x" } });
+const metadataResponse = (apps: Record<string, unknown>, branding?: Record<string, unknown>) =>
+  Response.json({
+    platform_key: "testorg",
+    platform_name: "Acme",
+    metadata: { apps, theme: "x", ...(branding && { auth_web_mentorai: branding }) },
+  });
 
 beforeEach(() => {
   vi.resetModules();
@@ -70,12 +75,23 @@ describe("readAppPaymentInfo", () => {
 
     const first = await readAppPaymentInfo();
     const second = await readAppPaymentInfo();
-    expect(first).toMatchObject({ info: info(), platformName: "Acme" });
+    expect(first).toMatchObject({ info: info(), platformName: "Acme", branding: {} });
     expect(second).toBe(first);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit | undefined];
     expect(String(url)).toBe(META_URL);
     expect(init?.headers).toBeUndefined();
+  });
+
+  it("hands back the platform's sign-in copy from the same read", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () =>
+        metadataResponse({ "demo-app": info() }, { title: "Theirs", display_logo: "u" }),
+      ),
+    );
+    const { readAppPaymentInfo } = await loadPaywall();
+    expect((await readAppPaymentInfo()).branding).toEqual({ title: "Theirs", display_logo: "u" });
   });
 
   it("treats a missing or malformed entry as undecided", async () => {
@@ -116,8 +132,8 @@ describe("writeAppPaymentInfo", () => {
     expect(JSON.parse(putInit.body as string)).toEqual({
       metadata: {
         apps: { "demo-app": info() },
-        // What login.iblai.app shows for the platform: the app's name (env,
-        // else the platform's) and the price line.
+        // A platform that says nothing yet is not left blank: the app's name
+        // (env, else the platform's) and the price line.
         auth_web_mentorai: {
           title: "Acme",
           display_title_info: "Acme",
@@ -125,6 +141,48 @@ describe("writeAppPaymentInfo", () => {
         },
       },
     });
+  });
+
+  it("keeps the platform's own title and heading, and appends the price to its line", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ platform_key: "testorg", platform_name: "Acme", metadata: {} }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { writeAppPaymentInfo } = await loadPaywall();
+
+    await writeAppPaymentInfo("dm-abc", info() as never, "Acme", {
+      title: "Search Craft",
+      display_title_info: "Search Craft",
+      display_description_info: "Learn the craft, earn the traffic",
+    });
+
+    const [, putInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    // Neither title is in the body at all: the platform's merge keeps them.
+    expect(JSON.parse(putInit.body as string).metadata.auth_web_mentorai).toEqual({
+      display_description_info: "Learn the craft, earn the traffic · $29/month",
+    });
+  });
+
+  it("replaces the price it appended before instead of stacking another", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ platform_key: "testorg", platform_name: "Acme", metadata: {} }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { writeAppPaymentInfo } = await loadPaywall();
+
+    await writeAppPaymentInfo(
+      "dm-abc",
+      info({ amount: 4900, access: "one_time" }) as never,
+      "Acme",
+      {
+        display_description_info: "Learn the craft, earn the traffic · $29/month",
+      },
+    );
+
+    const [, putInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(
+      JSON.parse(putInit.body as string).metadata.auth_web_mentorai.display_description_info,
+    ).toBe("Learn the craft, earn the traffic · $49");
   });
 
   it("passes the DM's refusal through", async () => {

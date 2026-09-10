@@ -1,18 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 /**
- * lib/iblai/auth-utils.ts: every trip to the login SPA carries the app's
- * platform and the SPA's `enforce-login` switch (the form once, no SSO
- * lookup after its custom-domain check), whatever platform the SDK passes;
- * a forced logout adds `logout=1`; sign-out goes straight to that form.
+ * lib/iblai/auth-utils.ts: every trip to the login SPA is its join page for
+ * the app's platform (from env), whatever platform or logout flag the SDK
+ * passes — it makes the account or signs one in and links it to the
+ * platform, so nobody arrives as a non-member; sign-out goes to the SPA's
+ * logout page, which comes back to the app.
  */
 
 const ENV: Record<string, string> = {
   NEXT_PUBLIC_MAIN_TENANT_KEY: "acme",
   NEXT_PUBLIC_AUTH_URL: "https://login.example.test",
 };
-const LOGIN =
-  "https://login.example.test/login?app=custom&redirect-to=http://localhost:3000&tenant=acme&enforce-login=1";
+const JOIN =
+  "https://login.example.test/join?tenant=acme&redirect-to=http%3A%2F%2Flocalhost%3A3000";
+const LOGOUT =
+  "https://login.example.test/logout?redirect-to=http%3A%2F%2Flocalhost%3A3000&tenant=acme";
 
 const savedEnv: Record<string, string | undefined> = {};
 let savedWindow: unknown;
@@ -53,34 +56,34 @@ afterEach(() => {
   g.localStorage = savedStorage;
 });
 
-describe("authLoginUrl", () => {
-  it("scopes the SPA to the env platform and asks for the form once", async () => {
-    const { authLoginUrl } = await load();
-    expect(authLoginUrl("http://localhost:3000")).toBe(LOGIN);
+describe("authJoinUrl", () => {
+  it("is the SPA's join page for the env platform, both values encoded", async () => {
+    const { authJoinUrl } = await load();
+    expect(authJoinUrl("http://localhost:3000")).toBe(JOIN);
   });
 });
 
 describe("redirectToAuthSpa", () => {
-  it("ignores the platform the SDK passes and marks a forced logout", async () => {
+  it("ignores the platform and the logout flag the SDK passes", async () => {
     const { redirectToAuthSpa } = await load();
     await redirectToAuthSpa(undefined, "other", true);
-    expect(loc.href).toBe(`${LOGIN}&logout=1`);
+    expect(loc.href).toBe(JOIN);
   });
 
   it("remembers where to come back to when asked", async () => {
     const { redirectToAuthSpa } = await load();
     await redirectToAuthSpa("/account", undefined, false, true);
     expect(localStorage.getItem("redirectTo")).toBe("/account");
-    expect(loc.href).toBe(LOGIN);
+    expect(loc.href).toBe(JOIN);
   });
 });
 
 describe("handleLogout", () => {
-  it("clears the app's state and goes straight to the login form", async () => {
+  it("clears the app's state and goes to the SPA's logout page", async () => {
     const { handleLogout } = await load();
     localStorage.setItem("dm_token", "t");
     handleLogout();
     expect(localStorage.getItem("dm_token")).toBeNull();
-    expect(loc.href).toBe(LOGIN);
+    expect(loc.href).toBe(LOGOUT);
   });
 });

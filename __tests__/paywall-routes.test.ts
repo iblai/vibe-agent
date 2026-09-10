@@ -105,12 +105,15 @@ const monthly = (over: Record<string, unknown> = {}) => ({
 const stubFetch = ({
   member = true,
   apps = {} as Record<string, unknown>,
+  branding,
   dm = () => Response.json({}),
   selfJoin = () => Response.json({ platform_key: "testorg" }),
   connect = () => Response.json(CONNECTED),
 }: {
   member?: boolean;
   apps?: Record<string, unknown>;
+  /** What the platform's sign-in copy says already, when a test needs one. */
+  branding?: Record<string, unknown>;
   dm?: (url: string, init?: RequestInit) => Response;
   selfJoin?: () => Response;
   connect?: (init?: RequestInit) => Response;
@@ -136,7 +139,7 @@ const stubFetch = ({
         return Response.json({
           platform_key: "testorg",
           platform_name: "Acme",
-          metadata: { apps },
+          metadata: { apps, ...(branding && { auth_web_mentorai: branding }) },
         });
       }
       if (url === CONFIG_URL) {
@@ -297,6 +300,37 @@ describe("POST /api/paywall/admin/setup", () => {
       display_title_info: "Caveman Coach",
       display_description_info: "$29/month",
     });
+  });
+
+  it("leaves the platform's own sign-in copy alone and appends the price to its line", async () => {
+    stubFetch({
+      branding: {
+        title: "Search Craft",
+        display_title_info: "Search Craft",
+        display_description_info: "Learn the craft, earn the traffic",
+      },
+      dm: (url) => Response.json(url.endsWith("/prices/") ? { id: "price_new" } : { id: "prod_1" }),
+    });
+    const { POST } = await loadSetup();
+
+    expect((await POST(post({ access: "monthly", amount: 2990 }))).status).toBe(200);
+    // Neither title is written at all: the platform's merge keeps what it has.
+    expect(metaWrites[0].body.metadata.auth_web_mentorai).toEqual({
+      display_description_info: "Learn the craft, earn the traffic · $29.90/month",
+    });
+  });
+
+  it("swaps the price it appended before rather than stacking a second one", async () => {
+    stubFetch({
+      branding: { display_description_info: "Learn the craft, earn the traffic · $29.90/month" },
+      dm: (url) => Response.json(url.endsWith("/prices/") ? { id: "price_new" } : { id: "prod_1" }),
+    });
+    const { POST } = await loadSetup();
+
+    expect((await POST(post({ access: "one_time", amount: 4900 }))).status).toBe(200);
+    expect(metaWrites[0].body.metadata.auth_web_mentorai.display_description_info).toBe(
+      "Learn the craft, earn the traffic · $49",
+    );
   });
 
   it("monthly, first time: asks the platform for its Stripe source with the admin's own token, creates the product (named after the platform, tagged) and a recurring USD price, opens self-join, and records the source", async () => {

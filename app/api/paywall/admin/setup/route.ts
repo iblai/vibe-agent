@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   try {
     invalidateAppPaymentInfo();
-    const { info: current, platformName } = await readAppPaymentInfo();
+    const { info: current, platformName, branding } = await readAppPaymentInfo();
     // The platform's Stripe source right now: what the product and price are
     // created on, and whose publishable key and account the record carries.
     const source = paid
@@ -147,7 +147,8 @@ export async function POST(req: NextRequest) {
     await openSelfJoin(caller.token);
 
     // 5. Record the choice (nulls included: the DM merges and cannot delete
-    //    keys) and brand the login screens with the app's name and price.
+    //    keys). The login screens keep whatever the platform says; the price
+    //    joins its description (loginBranding), and its title is left alone.
     const info: AppPaymentInfo = {
       version: 1,
       access: access as Access,
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
       updated_by: caller.username,
     };
-    await writeAppPaymentInfo(caller.token, info, platformName);
+    await writeAppPaymentInfo(caller.token, info, platformName, branding);
     return NextResponse.json({ info });
   } catch (e) {
     return failure(e);

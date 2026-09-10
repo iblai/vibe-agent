@@ -34,54 +34,43 @@ function getRedirectOrigin(): string {
 }
 
 /**
- * The Auth SPA's login URL that comes back to {origin}/sso-login-complete,
- * always scoped to the app's platform (NEXT_PUBLIC_MAIN_TENANT_KEY): the SPA
- * brands its screens from that platform's metadata, and a member of it lands
- * on it. A non-member's login reaches the SPA's completion step without the
- * tenant (the SPA drops it on that hop), so the SPA never tries to join
- * them; the SDK `TenantProvider` self-joins them on arrival (every setup
- * save opens the platform's self-join switch).
- *
- * `enforce-login=1` is the SPA's own "the form, fresh session" switch (it
- * uses it after creating an organisation). Without it, a `tenant=` on the
- * URL makes the SPA's login page look the platform's SSO login URL up once
- * its custom-domain check on `redirect-to` settles — after it has already
- * rendered the form — so the form gives way to a spinner and comes back: a
- * flicker on every arrival. The price: the SPA drops its own session on
- * arrival, so someone signed in to another ibl.ai app in this browser types
- * their credentials once instead of being passed through.
+ * The login SPA's join page for the app's platform, built the way the SDK
+ * (`getAuthSpaJoinUrl`) and the OS build it. It makes the account or signs an
+ * existing one in, links it to the platform (the platform's self-join, which
+ * every setup save opens) and comes back to {origin}/sso-login-complete.
+ * Every visitor without a session goes here, so nobody arrives as a
+ * non-member and the SDK `TenantProvider` only confirms the membership.
+ * Everything is env: NEXT_PUBLIC_AUTH_URL, NEXT_PUBLIC_MAIN_TENANT_KEY, and
+ * {origin} is where the app runs (NEXT_PUBLIC_TAURI_CUSTOM_SCHEME on mobile).
  */
-export const authLoginUrl = (origin: string) =>
-  `${config.authUrl()}/login?app=custom&redirect-to=${origin}&tenant=${encodeURIComponent(resolveAppTenant())}&enforce-login=1`;
+export const authJoinUrl = (origin: string) =>
+  `${config.authUrl()}/join?tenant=${encodeURIComponent(resolveAppTenant())}&redirect-to=${encodeURIComponent(origin)}`;
 
 /** Where SsoLogin sends the browser once the Auth SPA returns (the key it reads, then clears). */
 export const saveReturnPath = (path: string) => localStorage.setItem("redirectTo", path);
 
 /**
- * Redirect the browser to the ibl.ai Auth SPA for login. The SDK passes a
- * platform key of its own on some paths (`platformKey`); this app has one
- * platform, so the URL always carries the env key and that argument is
- * ignored.
+ * Send the browser to the login SPA's join page. The SDK passes a platform
+ * key of its own on some paths and asks for a forced re-login on others
+ * (`logout`); this app has one platform, from env, and the join page has no
+ * such switch — a live SPA session passes straight through with fresh tokens
+ * and gets linked — so both arguments are ignored.
  */
 export async function redirectToAuthSpa(
   redirectTo?: string,
   _platformKey?: string,
-  logout?: boolean,
+  _logout?: boolean,
   saveRedirect?: boolean,
 ) {
-  const redirectOrigin = getRedirectOrigin();
   const path = redirectTo ?? (typeof window !== "undefined" ? window.location.pathname : "/");
 
   if (saveRedirect) saveReturnPath(path);
-
-  let authUrl = authLoginUrl(redirectOrigin);
-  if (logout) authUrl += "&logout=1";
 
   // All platforms (web, desktop Tauri, mobile Tauri): navigate the window
   // to the Auth SPA.  On desktop Tauri the auth page loads in-app, and
   // the Rust on_navigation filter opens OAuth providers (Google, Apple)
   // in a popup window automatically.
-  window.location.href = authUrl;
+  window.location.href = authJoinUrl(getRedirectOrigin());
 }
 
 /** Check whether a non-expired auth token exists in localStorage. */
@@ -95,12 +84,12 @@ export function hasNonExpiredAuthToken(): boolean {
 }
 
 /**
- * Sign out: clear the app's state and go straight to the login form. The
- * SPA's login page logs its own session out on `enforce-login` exactly as
- * its /logout page does, and that page would only send the browser back
- * here to be bounced to the form: three page loads for one.
+ * Sign out: clear the app's state and go to the SPA's logout page (the
+ * SDK's, the OS's and the starter's contract). It drops the SPA's own
+ * session and returns to the app, whose AuthProvider sends the signed-out
+ * visitor to the join page.
  */
 export function handleLogout() {
   localStorage.clear();
-  window.location.href = authLoginUrl(getRedirectOrigin());
+  window.location.href = `${config.authUrl()}/logout?redirect-to=${encodeURIComponent(getRedirectOrigin())}&tenant=${encodeURIComponent(resolveAppTenant())}`;
 }

@@ -151,3 +151,49 @@ describe("resolveUser identity cache", () => {
     expect(mock).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("priceLine", () => {
+  const info = (over: Record<string, unknown>) =>
+    ({ access: "one_time", amount: 4900, currency: "usd", ...over }) as never;
+
+  it("says what the platform charges, cents only when there are any", async () => {
+    const { priceLine } = await loadPaywall();
+    expect(priceLine(info({}))).toBe("$49");
+    expect(priceLine(info({ amount: 2990 }))).toBe("$29.90");
+    expect(priceLine(info({ access: "monthly", amount: 2900 }))).toBe("$29/month");
+    expect(priceLine(info({ access: "monthly", amount: 2990 }))).toBe("$29.90/month");
+    expect(priceLine(info({ access: "free", amount: null }))).toBe("Free");
+    expect(priceLine(info({ amount: null }))).toBe("Free");
+  });
+});
+
+describe("descriptionWithoutPrice", () => {
+  it("keeps what the platform wrote and takes back only a price this app appended", async () => {
+    const { descriptionWithoutPrice } = await loadPaywall();
+    expect(descriptionWithoutPrice("Learn the craft, earn the traffic · $29.90/month")).toBe(
+      "Learn the craft, earn the traffic",
+    );
+    expect(descriptionWithoutPrice("Learn the craft · Free")).toBe("Learn the craft");
+    expect(descriptionWithoutPrice("Learn the craft, earn the traffic")).toBe(
+      "Learn the craft, earn the traffic",
+    );
+  });
+
+  it("treats a line that is nothing but a price as this app's own, and drops it", async () => {
+    const { descriptionWithoutPrice } = await loadPaywall();
+    // What older releases left behind: the whole line was the price.
+    expect(descriptionWithoutPrice("$15")).toBe("");
+    expect(descriptionWithoutPrice("$29.90/month")).toBe("");
+    expect(descriptionWithoutPrice("Free")).toBe("");
+  });
+
+  it("leaves a line that merely mentions money, and copes with nothing at all", async () => {
+    const { descriptionWithoutPrice } = await loadPaywall();
+    expect(descriptionWithoutPrice("Save $49 a month on agency fees")).toBe(
+      "Save $49 a month on agency fees",
+    );
+    expect(descriptionWithoutPrice("Coaching · one job a week")).toBe("Coaching · one job a week");
+    expect(descriptionWithoutPrice(undefined)).toBe("");
+    expect(descriptionWithoutPrice(42)).toBe("");
+  });
+});

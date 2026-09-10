@@ -274,22 +274,22 @@ of users:
 
 ### Map
 
-| Where                                                   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/(app)/`                                            | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/` (the SDK `Chat` inside the pay gate), `/analytics/*` (the SDK `AnalyticsLayout` tab strip over eight pages — Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports — Admin mode only), `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels).                                                                                                                                                                       |
-| `app/setup/`                                            | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `app/sso-login-complete/`                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `app/api/paywall/admin/connect/`                        | Connect with Stripe relay: GET the platform's Stripe source (`source`: a pasted `key`, the `connected` account, or null), POST `{return_url}` for Stripe's authorize URL, DELETE to disconnect — each forwarding the admin's own DM token to the platform's connect endpoint on their own path; statuses and bodies pass through verbatim.                                                                                                                                                                                                                     |
-| `app/api/paywall/admin/setup/`                          | Admin rail: one route that, for a paid answer, asks the platform which Stripe source it runs on (none, or one without a publishable key → 400, nothing touched), retires the old price (a 404 there is nothing to retire: after a reconnect it lives on another account), ensures the tagged product and creates the price on that source, opens self-join, then records the choice — with the source's publishable key and account — and the login branding, forwarding the admin's own DM token. Free records the choice only: zero Stripe or connect calls. |
-| `lib/paywall.ts`, `lib/paywall-admin.ts`                | Server-only plumbing for the admin routes: identity from the caller's own token, the proxy and connect fetches on their path, the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                                                                                                                                                               |
-| `lib/paywall-client.ts`, `components/setup/`            | Browser side: the buyer rail straight to the platform with the member's own token (the catalogue from the public metadata, the embedded checkout session, the access check), the setup and access checks, and the setup screen (the question, then Connect with Stripe).                                                                                                                                                                                                                                                                                       |
-| `components/pay-gate.tsx`, `components/pay-modal.tsx`   | The send gate around the SDK `Chat` (capture listeners on its composer; see "The send gate and SDK bumps") and the modal it opens: Stripe's embedded checkout form on the platform's Stripe source, Not now.                                                                                                                                                                                                                                                                                                                                                   |
-| `components/sidebar/`, `lib/chat-rows.ts`               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows.                                                                                                                                                                                                                                          |
-| `components/loading-screen.tsx`                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                                                                                                                                                                                                                                                            |
-| `lib/iblai/`                                            | `config.ts` (env accessors), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `providers/iblai-providers.tsx`, `store/iblai-store.ts` | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `.github/workflows/`                                    | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                                                                                                                                                                                                                                                                   |
-| `proxy.ts`                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Where                                                   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/(app)/`                                            | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/` (the SDK `Chat` inside the pay gate), `/analytics/*` (the SDK `AnalyticsLayout` tab strip over eight pages — Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports — Admin mode only), `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels).                                                                                                                                                                                                                                                    |
+| `app/setup/`                                            | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `app/sso-login-complete/`                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `app/api/paywall/admin/connect/`                        | Connect with Stripe relay: GET the platform's Stripe source (`source`: a pasted `key`, the `connected` account, or null), POST `{return_url}` for Stripe's authorize URL, DELETE to disconnect — each forwarding the admin's own DM token to the platform's connect endpoint on their own path; statuses and bodies pass through verbatim.                                                                                                                                                                                                                                                                                                  |
+| `app/api/paywall/admin/setup/`                          | Admin rail: one route that, for a paid answer, asks the platform which Stripe source it runs on (none, or one without a publishable key → 400, nothing touched), retires the old price (a 404 there is nothing to retire: after a reconnect it lives on another account), ensures the tagged product and creates the price on that source, opens self-join, then records the choice — with the source's publishable key and account — and appends the price to the login branding without editing the platform's own title or description, forwarding the admin's own DM token. Free records the choice only: zero Stripe or connect calls. |
+| `lib/paywall.ts`, `lib/paywall-admin.ts`                | Server-only plumbing for the admin routes: identity from the caller's own token, the proxy and connect fetches on their path, the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `lib/paywall-client.ts`, `components/setup/`            | Browser side: the buyer rail straight to the platform with the member's own token (the catalogue from the public metadata, the embedded checkout session, the access check), the setup and access checks, and the setup screen (the question, then Connect with Stripe).                                                                                                                                                                                                                                                                                                                                                                    |
+| `components/pay-gate.tsx`, `components/pay-modal.tsx`   | The send gate around the SDK `Chat` (capture listeners on its composer; see "The send gate and SDK bumps") and the modal it opens: Stripe's embedded checkout form on the platform's Stripe source, Not now.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `components/sidebar/`, `lib/chat-rows.ts`               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows.                                                                                                                                                                                                                                                                                                                       |
+| `components/loading-screen.tsx`                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `lib/iblai/`                                            | `config.ts` (env accessors), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `providers/iblai-providers.tsx`, `store/iblai-store.ts` | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `.github/workflows/`                                    | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `proxy.ts`                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ### Invariants, and why
 
@@ -303,9 +303,12 @@ of users:
   by the deploy skill's `NEXT_PUBLIC_*` allowlist. Never in the platform's
   metadata (that store is the paywall choice), never invented: ask for the
   OS URL.
-- Accounts are the platform's: a visitor without one registers on the login
-  SPA's own sign-up (the app has no form of its own); the app never creates
-  users, and everyone who signs in is a member.
+- Accounts are the platform's: every visitor without a session goes to the
+  login SPA's join page for the platform (`authJoinUrl` in
+  `lib/iblai/auth-utils.ts`, every part from env), which makes the account
+  or signs one in and links it to the platform (the app has no form of its
+  own); the app never creates users or links them, and everyone who arrives
+  is a member.
 - The app holds no platform secret: no `IBLAI_API_KEY`, no Stripe key. The
   buyer rail runs in the browser on the buyer's own DM token; the admin routes
   forward the admin's own token; the Platform API Token exists only in
@@ -363,12 +366,12 @@ Payment is the entitlement, checked when a member sends. Three rails, no
 platform key anywhere (`lib/paywall-client.ts` in the browser, `lib/paywall.ts`
 on the server):
 
-| Call                                                                                                                         | Who calls the platform     | Credential                               | Path user  |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------- | ---------- |
-| read the platform's choice (what is for sale)                                                                                | the browser                | none: platform metadata is a public read | none       |
-| mint the embedded checkout session, verify the completed session and record it, live standing                                | the browser                | the member's own DM `Token`              | the member |
-| ask the Stripe source, retire/create product and price (paid only), open self-join, record the choice and the login branding | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
-| Connect with Stripe: status, start (the authorize URL), disconnect                                                           | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
+| Call                                                                                                                                             | Who calls the platform     | Credential                               | Path user  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- | ---------------------------------------- | ---------- |
+| read the platform's choice (what is for sale)                                                                                                    | the browser                | none: platform metadata is a public read | none       |
+| mint the embedded checkout session, verify the completed session and record it, live standing                                                    | the browser                | the member's own DM `Token`              | the member |
+| ask the Stripe source, retire/create product and price (paid only), open self-join, record the choice and append the price to the login branding | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
+| Connect with Stripe: status, start (the authorize URL), disconnect                                                                               | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
 
 Why the browser mints the checkout itself: an embedded Checkout Session's
 `client_secret` needs a Stripe secret, so the platform mints it — and the
@@ -412,30 +415,41 @@ needs; the app never chooses. Reasons the callback can land with:
 OAuth code — `setup-screen.tsx` puts them in plain words.
 
 Who reaches the login SPA: anyone without a session (the SDK `AuthProvider`),
-through `redirectToAuthSpa` in `lib/iblai/auth-utils.ts`, with the platform
-(`tenant=`). What the SPA shows there is the platform's own branding: it
-reads `metadata.auth_web_<app>` from the platform's public metadata —
-`display_title_info` as the heading, `title` as the tab,
-`display_description_info` as the line under it — and its normalizer maps
-every unknown `app` value (our `app=custom`) to `mentorai`, so
-`auth_web_mentorai` is the key. The setup route writes it on every save
-(`loginBranding()` in `lib/paywall.ts`: the app's name from env, else the
-platform's, and the price line — `$29/month`, `$49`, `Free`), beside the
-choice, in the same deep-merge PUT; the platform's own logo and images under
-that key survive. The same key brands the platform's OS login: one platform,
-one app. A rename (`NEXT_PUBLIC_APP_NAME`) reaches the login screens on the
-next save.
+through `redirectToAuthSpa` in `lib/iblai/auth-utils.ts`, on its join page
+for the platform — `/join?tenant=<platform>&redirect-to=<origin>`, the shape
+of the SDK's `getAuthSpaJoinUrl` and the OS's "log in or sign up" link, every
+part from env (`NEXT_PUBLIC_AUTH_URL`, `NEXT_PUBLIC_MAIN_TENANT_KEY`, the
+origin the app runs on). What the SPA shows there is the platform's own
+branding: it reads `metadata.auth_web_<app>` from the platform's public
+metadata — `display_title_info` as the heading, `title` as the tab,
+`display_description_info` as the line under it — under its default app,
+`mentorai` (the join URL names none; its normalizer maps every unknown value
+there too), so `auth_web_mentorai` is the key. The setup route touches it on
+every save (`loginBranding()` in `lib/paywall.ts`) without editing a word the
+platform wrote: the title and the heading are sent only when it has none (the
+app's name from env, else the platform's), and the price line — `$29/month`,
+`$49`, `Free` — is appended to its description after a middle dot, replacing
+a price appended before rather than stacking one. A description that is
+nothing but a price came from this app before it learned to append, so it
+counts as ours and goes. The write rides the same deep-merge PUT as the
+choice, so every key it omits — the platform's title, its logo, its images —
+keeps its stored value. The same key brands the platform's OS login: one
+platform, one app. A rename (`NEXT_PUBLIC_APP_NAME`) reaches the login
+screens on the next save, but only where the platform never set a title of
+its own.
 
-A visitor without an account clicks the SPA's Sign up: it registers them on
-edX (email, password), signs them in and comes back through
-`/sso-login-complete`; the sign-up hands off without the tenant, so they
-arrive as a non-member and the SDK `TenantProvider` self-joins them
-(`joinAndActivateTenant`, once per browser session). An existing account
-that is not a member yet goes the other way: `tenant=` on the login URL
-makes the SPA's `/login/complete` go to `/join`, whose self-link succeeds
-because setup opens it on every answer. Both need self-join open; closed in
-the OS anyway, the SPA ends on its 403 page and the SDK on its "no access"
-paragraph — loud, and the admin's next save on `/setup` opens it again. A
+The join page does the joining: it makes the account (email, password, on
+edX) or signs an existing one in, calls the platform's self-link with the
+user's own token, and comes back through `/sso-login-complete` — the user
+arrives a member, and the SDK `TenantProvider` only confirms it in the
+platform list. Its own self-join (`joinAndActivateTenant`: one attempt, the
+platform's answer discarded, then a logout and a generic "no access"
+paragraph on return) is the backstop, and its logout lands on the join page
+again. Self-join must be open (every setup answer opens it); closed in the
+OS, the join page ends on the SPA's 403 page — loud, and the admin's next
+save on `/setup` opens it again. Sign-out (`handleLogout`) is the SPA's
+`/logout?redirect-to=&tenant=`, which drops the SPA's session and returns
+to the app, and the app sends the signed-out visitor to the join page. A
 user must have at least one platform or the SPA shows its 409 — new users
 have `main`, the DM links every new user to it.
 
@@ -486,8 +500,8 @@ yet.
 
 Where to change what: how the modal looks, `components/pay-modal.tsx`; when
 it opens, `components/pay-gate.tsx`; what the platform is asked from the
-browser, `lib/paywall-client.ts`; what the login SPA shows, `loginBranding()`
-in `lib/paywall.ts`; the setup order, `app/api/paywall/admin/setup/route.ts`;
+browser, `lib/paywall-client.ts`; what the login SPA shows and what of it
+this app may touch, `loginBranding()` in `lib/paywall.ts`; the setup order, `app/api/paywall/admin/setup/route.ts`;
 the question's and the connect screen's copy, `components/setup/`.
 
 ### The send gate and SDK bumps
@@ -627,17 +641,20 @@ the flag off.
   every edX error as 500 "Failed to create user in edX - no response
   received" (`if not response:` on a `requests.Response`, falsy for any
   status ≥ 400) and to look a known email up only when no username is sent.
-  Accounts come from the login SPA's own sign-up.
-- The login SPA's `/login/complete` treats a `tenant=` the user is not a
-  member of as a JOIN: it goes to `/join`, whose self-link answers 403 while
-  self-join is closed and ends on the SPA's 403 page. Self-join is open here
-  (every setup answer opens it), so the login URL carries the tenant.
-  The SPA's sign-up hands off to `/login/complete?token=` without the tenant,
-  so a new account arrives as a non-member and the SDK self-joins it. Its
-  `data=` carries no `tenants`, so a return must land on a page under the
-  `TenantProvider`, which re-reads memberships. A user with zero platforms
-  ends on the SPA's 409 page; new users have `main` (the DM links every new
-  user to it, `core/utils/users.py`).
+  Accounts come from the login SPA's join page.
+- The login SPA's login page never joins anyone: its Sign up hands off to
+  `/login/complete?token=` without the tenant, so a new account arrived as a
+  non-member and everything rested on the SDK `TenantProvider`'s one
+  self-join attempt (`joinAndActivateTenant`: the platform's answer is
+  discarded, a `sessionStorage` guard `tenant_access_attempt_<key>` is set,
+  the user is logged out, and on return the guard shows the generic "no
+  access" paragraph). That is why every sign-in is the SPA's join page
+  (`/join?tenant=&redirect-to=`, the SDK's `getAuthSpaJoinUrl` shape): it
+  links the account before returning. The SPA's `data=` carries no
+  `tenants`, so a return must land on a page under the `TenantProvider`,
+  which re-reads memberships from the platform list. A user with zero
+  platforms ends on the SPA's 409 page; new users have `main` (the DM links
+  every new user to it, `core/utils/users.py`).
 - The DM's app-paywall contract: `paywall/checkout/` requires the price to
   be the one recorded under `apps.<slug>.stripe.price_id` in the platform
   metadata (once one is recorded) and the price's product to carry
@@ -647,12 +664,51 @@ the flag off.
   account linked with Connect with Stripe (this app's Monetize screen, the
   DM's own OAuth flow, `…/providers/stripe/connect/`) or a `stripe`
   integration credential pasted in the OS, which wins when set.
-- A 403 `Permission denied` on the member's own `paywall/checkout/` means
-  the platform's backend has not run `seed_rbac_data` since the DM change
-  that added `Ibl.Mentor/StripePaywallSelf/action` to the Students role; a
-  404 on `…/providers/stripe/connect/` means the backend predates that
-  change (DM 4.377.0). Neither is the app's to fall back from: the message
-  is shown.
+- A 403 `Permission denied` on the member's own `paywall/checkout/` or
+  `paywall/access/` is the platform's access control refusing the
+  self-service verb, and is never the app's to fall back from: the message
+  is shown, the send is blocked and no modal opens. The cause is a gap in
+  the platform's seed, not a seed that was never run — the Students role
+  does carry `Ibl.Mentor/StripePaywallSelf/action`, but no policy bound to
+  the Students group lists the resource it applies to
+  (`/platforms/<pk>/stripe-paywall-self/`), and a policy matches its
+  resources by prefix, so the verb can never fire. Admins pass only because
+  their own policy is granted at the platform root. Re-running the seed
+  rewrites the same list; the fix belongs in the platform's seeder. Until it
+  ships, an admin grants it once per platform: a role carrying that action
+  (`POST /api/core/rbac/roles/`), the platform's Students group
+  (`GET /api/core/rbac/groups/?platform_key=`), and a policy for
+  `/stripe-paywall-self/` attached to that group
+  (`POST /api/core/rbac/policies/`, which prefixes the platform itself). It
+  is an ordinary policy, so a reseed leaves it alone. A 404 on
+  `…/providers/stripe/connect/` means the backend predates the Connect
+  endpoints; those and the self-service verb both shipped in DM 4.378.0.
+- A member's token is minted for one platform and the paywall binds it: the
+  platform's Stripe surface compares the platform its credential was minted
+  for against the one in the URL and answers 403 "Platform '<key>' is not
+  your token's platform" — the same for the checkout, the access check and
+  the admin routes. So a member who arrives on another platform's token
+  (they signed in there, or the SDK self-joined them and kept the token they
+  came with — its `saveUserTokens` runs only on its own platform-switch
+  path) is refused everything until this platform's pair is minted. The app
+  mints it when the SDK reports a join (`onAutoJoinUserToTenant` →
+  `mintPlatformTokens()` in `lib/iblai/tokens.ts`): `POST
+<lms>/api/ibl/manager/consolidated-token/proxy/` with `platform_key` and
+  the member's edX JWT, the SDK's own `getAppTokens` call. The platform
+  mints only for a platform the user is already linked to, so it belongs
+  after the join and nowhere earlier; its `/api/core/consolidated-token/
+proxy/` twin refuses a `dm_token` outright (platform key or a
+  server-to-server credential only), so the LMS one is the browser's only
+  mint.
+- One enabled application form on the platform refuses every self-link with
+  `application_required`, whatever the self-join switch says: the platform's
+  application gate runs first, and a member has to apply and be approved
+  instead. Turn it off in the sidebar footer → Management → Applications →
+  the form → its Enabled switch (the SDK ships that tab, and the app hosts
+  the sheet). The API lever is `PATCH …/api/catalog/applications/platform/
+forms/manage/<form_id>` with `platform_key` in the query string as well as
+  the body and a JSON `false` — there is no delete, no global switch, and a
+  form is armed while `active` and `enabled` are both true.
 - Stripe.js: `loadStripe(pk, { stripeAccount })` is how a platform's own
   publishable key renders a connected account's session; `@stripe/stripe-js`
   9 has no client-only redirect (`redirectToCheckout` is gone), which is why

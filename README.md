@@ -58,6 +58,8 @@ Membership is free: anyone who signs in joins the platform. A payment is what un
 
 ## Quick Start
 
+Never used a terminal? Start with [the tutorial](docs/tutorial.md): it goes from this page to a paying customer, with Claude doing every technical step.
+
 ### Prerequisites
 
 - Node.js 20 or newer (22 is what this app is built with) and pnpm
@@ -109,14 +111,14 @@ pnpm start
 
 ## Paywall
 
-Membership is free: anyone who signs in on login.iblai.app joins the platform (setup opens self-join on every answer). A payment is what unlocks the agent: when the admin chose a fee, a member's first message opens the pay modal (`components/pay-gate.tsx`, `components/pay-modal.tsx`) with Stripe's own checkout form inside it (Stripe.js, embedded). The platform (DM) owns every payment: the browser asks the platform, with the member's own sign-in token, for a Checkout Session on the creator's Stripe account; Stripe renders the form in the modal; the platform verifies the session, records payments and checks subscriptions live. No commission, no webhooks, no card details in this app, and no Stripe key or platform key anywhere in it — not even on its server. The app has the setup screen (`app/setup`, `components/setup/setup-screen.tsx`), the browser rail (`lib/paywall-client.ts`) and two admin routes under `app/api/paywall/admin/` (setup, and the Connect with Stripe relay).
+Membership is free: every sign-in is login.iblai.app's join page for the platform, which makes the account or signs one in and links it to the platform (setup opens self-join on every answer). A payment is what unlocks the agent: when the admin chose a fee, a member's first message opens the pay modal (`components/pay-gate.tsx`, `components/pay-modal.tsx`) with Stripe's own checkout form inside it (Stripe.js, embedded). The platform (DM) owns every payment: the browser asks the platform, with the member's own sign-in token, for a Checkout Session on the creator's Stripe account; Stripe renders the form in the modal; the platform verifies the session, records payments and checks subscriptions live. No commission, no webhooks, no card details in this app, and no Stripe key or platform key anywhere in it — not even on its server. The app has the setup screen (`app/setup`, `components/setup/setup-screen.tsx`), the browser rail (`lib/paywall-client.ts`) and two admin routes under `app/api/paywall/admin/` (setup, and the Connect with Stripe relay).
 
 Who pays:
 
 - **Platform admins** never: sending is theirs.
 - **A member who has not paid** sees the modal on send while something is for sale; the message stays in the composer. Stripe's form is in the modal; when Stripe reports the payment complete the platform verifies the session on the member's own path and records it, and the send goes. Nothing leaves the page.
 - **A payer whose subscription lapsed** is caught within a minute of the next send: the platform's live check says the payment no longer grants, and the modal is back. Their membership stays.
-- **A visitor without an account** never sees a form of the app's own: `/` sends them to login.iblai.app, whose screens show the app's name and price and whose Sign up link makes the account; they come back a member.
+- **A visitor without an account** never sees a form of the app's own: `/` sends them to login.iblai.app's join page for the platform, which shows the platform's own name and description with the price after it, makes the account (or signs an existing one in) and links it to the platform; they come back a member.
 
 The gate is the app's: the platform's chat API itself is open to every member, so the modal keeps honest users honest, not the determined.
 
@@ -125,7 +127,7 @@ Setup is one question, asked of a platform admin the first time they open the ap
 - **Free access** — anyone who signs in joins. No Stripe needed, ever.
 - **One-time fee** or **Monthly fee** — enter the price (USD). The first time, a second screen ("Monetize Your Agent") has one button, **Connect with Stripe**: you sign in on Stripe (or create an account there), consent, and are back on `/setup`; the platform's own OAuth flow links your Stripe account to the platform. Nothing to copy, no key typed anywhere; payments go straight to that account, with no application fee. A platform whose admin pasted a `stripe` key in the OS skips the screen: that key wins over a connected account, and `/setup` says so. Disconnect and Reconnect are quiet links under Save; Reconnect switches Stripe accounts (or re-links the same one after revoking ibl.ai on Stripe): it disconnects, sends you through Connect with Stripe again, and a paid answer is re-saved on the new account.
 
-For a paid answer, Save creates the Stripe product (named after the app, tagged `metadata.app = NEXT_PUBLIC_PAYWALL_APP_SLUG`) and the price on that account, retires the previous price if the answer changed, and records the choice in the platform's metadata under `apps.<slug>`. Free records the choice, touching Stripe not at all. Every answer also opens self-join (anyone who signs in is a member) and writes the login branding — `auth_web_mentorai`, the app's name and the price line, what login.iblai.app shows for the platform, its OS login included; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the platform sells only the recorded one:
+For a paid answer, Save creates the Stripe product (named after the app, tagged `metadata.app = NEXT_PUBLIC_PAYWALL_APP_SLUG`) and the price on that account, retires the previous price if the answer changed, and records the choice in the platform's metadata under `apps.<slug>`. Free records the choice, touching Stripe not at all. Every answer also opens self-join (anyone who signs in is a member) and adds the price to the login branding — `auth_web_mentorai`, what login.iblai.app shows for the platform and its OS login too. Your own title and description are never edited: the price is appended to your description after a middle dot (and a price appended earlier is swapped, not stacked), and the app's name fills the title only when the platform has none; a price left behind by a paid → free switch stays active on Stripe but is never sold, since the platform sells only the recorded one:
 
 ```json
 {
