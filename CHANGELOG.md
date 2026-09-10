@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.0](https://github.com/iblai/vibe-agent/compare/v1.7.0...v1.8.0) (2026-09-10)
+
+### Features
+
+* sign in via the join page, mint platform tokens, keep sign-in copy, add the tutorial ([9d09b85](https://github.com/iblai/vibe-agent/commit/9d09b85e75307025bb40a63e015ffb69c5884aea))
+
 ## [1.7.0](https://github.com/iblai/vibe-agent/compare/v1.6.0...v1.7.0) (2026-09-09)
 
 ### Features
