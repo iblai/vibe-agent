@@ -62,7 +62,7 @@ Claude downloads the app and follows the instructions inside it. It asks you for
 
 Then Claude installs what the app needs, starts it, and tells you to open **http://localhost:3000** in your browser. That address is the app running on your own computer; only you can see it for now.
 
-If Claude downloads the app and stops there, say `follow AGENTS.md`.
+If Claude downloads the app and stops there, say `follow CLAUDE.md`.
 
 ## 2. Sign in as the owner
 
