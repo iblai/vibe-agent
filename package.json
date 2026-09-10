@@ -1,6 +1,6 @@
 {
   "name": "vibe-agent",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "private": true,
   "scripts": {
     "predev": "next telemetry disable",
