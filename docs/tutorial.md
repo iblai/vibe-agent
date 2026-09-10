@@ -4,11 +4,17 @@ You have an agent on ibl.ai. By the end of this tutorial it has its own web app:
 
 The example throughout is **Search Craft**, an SEO school. Its agent, **Search Craft Coach**, teaches site owners to get found, and access costs $29.90 a month. Swap in your own platform, agent and price.
 
+## Watch it first
+
+### [▶ Part 1 — the owner sets it up](https://drive.google.com/file/d/1Z2R9TszJsKUQfOhwWykRuFEgX1qnkRTO/view)
+
+### [▶ Part 2 — a customer's first visit](https://drive.google.com/file/d/16tZ40BUhRerb4QGP2TLWOlmePVz1O3U9/view)
+
+Two screen recordings, chapters 1–6 and chapter 7 below.
+
 ![A paying customer talking to Search Craft Coach](tutorial/14-customer-chat-paid.png)
 
 _Where you end up: a customer, paid up, getting a plan from the coach._
-
-Watch it first if you like: [the owner's setup](https://drive.google.com/file/d/1Z2R9TszJsKUQfOhwWykRuFEgX1qnkRTO/view) (chapters 1–6) and [a customer's first visit](https://drive.google.com/file/d/16tZ40BUhRerb4QGP2TLWOlmePVz1O3U9/view) (chapter 7), two screen recordings.
 
 An hour or so, most of it waiting for things to install.
 
