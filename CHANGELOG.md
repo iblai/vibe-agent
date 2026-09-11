@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.0](https://github.com/iblai/vibe-agent/compare/v1.8.2...v1.9.0) (2026-09-11)
+
+### Features
+
+* add an in-app setup wizard, one route per question, and no env file to write ([5d638f6](https://github.com/iblai/vibe-agent/commit/5d638f6126133079f5b13f73951e6259b1508674))
+
 ## [1.8.2](https://github.com/iblai/vibe-agent/compare/v1.8.1...v1.8.2) (2026-09-10)
 
 ### Chores
