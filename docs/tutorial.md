@@ -1,5 +1,11 @@
 # Sell access to your AI agent: the vibe-agent tutorial
 
+> **Being rewritten.** The app now asks its own setup questions — you press
+> **Start** in the browser and answer the platform, the agent, the app's name
+> and the price there. Chapter 1's table of things Claude asks for, and the
+> first screenshots of Part 1, are from the older flow where Claude asked them
+> in the chat. Everything from chapter 3 on still holds.
+
 You have an agent on ibl.ai. By the end of this tutorial it has its own web app: people sign up, pay you on your own Stripe account, and talk to it. You write no code. Whenever something technical is needed, you tell Claude Code what you want and it does it.
 
 The example throughout is **Search Craft**, an SEO school. Its agent, **Search Craft Coach**, teaches site owners to get found, and access costs $29.90 a month. Swap in your own platform, agent and price.

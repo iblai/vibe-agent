@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * The app's paywall choice lives in the platform's PUBLIC metadata
@@ -48,6 +50,14 @@ const metadataResponse = (apps: Record<string, unknown>, branding?: Record<strin
     metadata: { apps, theme: "x", ...(branding && { auth_web_mentorai: branding }) },
   });
 
+/**
+ * A working directory with no data/onboarding.db in it. These suites pin the
+ * env ladder, and the stored platform beats env by design — without this they
+ * read the developer's own database and fail once this app has been set up
+ * locally.
+ */
+const NO_DATABASE = join(tmpdir(), "vibe-agent-no-database");
+
 beforeEach(() => {
   vi.resetModules();
   for (const key of ENV_KEYS) {
@@ -57,9 +67,11 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.edu";
   process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "testorg";
   process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "demo-app";
+  vi.spyOn(process, "cwd").mockReturnValue(NO_DATABASE);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   for (const key of ENV_KEYS) {
     if (saved[key] === undefined) delete process.env[key];

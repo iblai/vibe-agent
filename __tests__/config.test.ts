@@ -12,6 +12,7 @@ const ENV_KEYS = [
   "NEXT_PUBLIC_API_BASE_URL",
   "NEXT_PUBLIC_PLATFORM_BASE_DOMAIN",
   "NEXT_PUBLIC_AUTH_URL",
+  "NEXT_PUBLIC_BASE_WS_URL",
   "NEXT_PUBLIC_LEGACY_LMS_URL",
   "NEXT_PUBLIC_MFE_URL",
   "NEXT_PUBLIC_PAYWALL_APP_SLUG",
@@ -48,6 +49,9 @@ describe("hosted defaults in code", () => {
     // edX hosts are NOT under the consolidated API base.
     expect(config.legacyLmsUrl()).toBe("https://learn.iblai.app");
     expect(config.mfeUrl()).toBe("https://apps.learn.iblai.app");
+    // The two .env.example no longer lists, so nothing else pins them.
+    expect(config.baseWsUrl()).toBe("wss://asgi.data.iblai.app");
+    expect(config.platformBaseDomain()).toBe("iblai.app");
   });
 
   it("uses an explicit NEXT_PUBLIC_API_BASE_URL verbatim", async () => {
@@ -81,8 +85,8 @@ describe("hosted defaults in code", () => {
 });
 
 describe("paywallAppSlug", () => {
-  it("reads NEXT_PUBLIC_PAYWALL_APP_SLUG, empty when unset", async () => {
-    expect((await loadConfig()).paywallAppSlug()).toBe("");
+  it("defaults in code when unset — a fresh clone has no env file at all", async () => {
+    expect((await loadConfig()).paywallAppSlug()).toBe("vibe-agent");
     process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "demo-app";
     vi.resetModules();
     expect((await loadConfig()).paywallAppSlug()).toBe("demo-app");

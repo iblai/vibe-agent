@@ -19,10 +19,13 @@ const PLACEHOLDER_PLATFORMS = new Set([
   "",
 ]);
 
+/** A key that names a real platform: set, and not a placeholder or the shared `main`. */
+export const isRealPlatform = (key: string): boolean => !!key && !PLACEHOLDER_PLATFORMS.has(key);
+
 /** The app's platform key from env, or "" when unset or still a placeholder. */
 export function resolveAppTenant(): string {
   const envTenant = config.mainTenantKey();
-  return envTenant && !PLACEHOLDER_PLATFORMS.has(envTenant) ? envTenant : "";
+  return isRealPlatform(envTenant) ? envTenant : "";
 }
 
 /**

@@ -55,6 +55,11 @@ const reactReduxDir = dedup("react-redux");
 if (reactReduxDir) resolveAliases["react-redux"] = reactReduxDir;
 
 const nextConfig: NextConfig = {
+  // The setup wizard's answer lives in data/onboarding.db, which the server
+  // reads at runtime. Tracing has no way to know that, so name it: without this
+  // the file rides the deploy zip but never reaches the function bundle, and a
+  // published app comes up as if it had never been set up.
+  outputFileTracingIncludes: { "/*": ["./data/**"] },
   // The SDK's useVoiceChat never resets its isMounted ref after StrictMode's
   // dev double-mount, wedging voice input at "Processing…". Host workaround.
   reactStrictMode: false,

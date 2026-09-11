@@ -1,23 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { OnboardingShell } from "@iblai/iblai-js/web-containers";
-import { isTenantAdmin } from "@/lib/iblai/tenant";
-import { SetupScreen } from "@/components/setup/setup-screen";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { LoadingScreen } from "@/components/loading-screen";
+import { currentSetupStep, readAnswered, setupPath } from "@/lib/setup-steps";
 
-// Outside the (app) group on purpose: sign-in gated by the providers, but no
-// navbar — the SDK's onboarding canvas is the whole page. Platform admins only;
-// the platform enforces the same rule on every call the screens make.
+/**
+ * `/setup` has no screen of its own: it sends the browser to whichever step the
+ * app is actually on. That is why everything else — the admin redirect in the
+ * app shell, the quiet "Payments setup" link on /account, the no-agent alert,
+ * the return path saved before signing in — keeps linking here and none of them
+ * has to know the order.
+ */
 export default function SetupPage() {
-  // Read once on the client: the providers hold this tree until mounted.
-  const [isAdmin] = useState(() => typeof window !== "undefined" && isTenantAdmin());
+  const router = useRouter();
 
-  if (isAdmin) return <SetupScreen />;
-  return (
-    <OnboardingShell totalSteps={1} currentStep={1}>
-      <p role="alert" className="text-sm text-destructive">
-        Only platform admins can set up payments.
-      </p>
-    </OnboardingShell>
-  );
+  useEffect(() => {
+    router.replace(setupPath(currentSetupStep(readAnswered())));
+  }, [router]);
+
+  return <LoadingScreen />;
 }

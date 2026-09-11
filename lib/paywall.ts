@@ -7,9 +7,17 @@
 // Relative import (not @/): __tests__ load this module under vitest, which
 // resolves no path alias.
 import config from "./iblai/config";
+import { platformKey, storedSlug } from "./onboarding";
 
-/** What this app is called on the platform (NEXT_PUBLIC_PAYWALL_APP_SLUG). */
-export const PAYWALL_APP_SLUG = config.paywallAppSlug();
+/**
+ * What this app is called on the platform: the slug the setup wizard minted from
+ * the app's name, else the NEXT_PUBLIC_PAYWALL_APP_SLUG override, else the
+ * shared default every install used before slugs were minted.
+ *
+ * A function, not a constant: it is answered during setup now, so reading it
+ * once at import would freeze whatever was true when the server booted.
+ */
+export const appSlug = (): string => storedSlug() || config.paywallAppSlug();
 
 export type PaywallUser = { userId: number; username: string; email: string };
 
@@ -66,7 +74,7 @@ export async function callerFromRequest(
 export type DmInit = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
 const stripeBase = (username: string) =>
-  `${config.dmUrl()}/api/ai-mentor/orgs/${config.mainTenantKey()}` +
+  `${config.dmUrl()}/api/ai-mentor/orgs/${platformKey()}` +
   `/users/${encodeURIComponent(username)}/providers/stripe`;
 
 function dmFetchAs(token: string, url: string, init?: DmInit) {
@@ -125,13 +133,20 @@ export async function dmJson(res: Response): Promise<any> {
  * POST the platform's self-join switch open with {authorization} (the
  * admin's own token, from the setup route). Membership is free here, so
  * anyone who signs in must be able to join.
+ *
+ * {platform} is for the onboarding route, where the platform being answered
+ * for is not the stored one yet. The DM refuses a non-admin, so a 2xx here is
+ * also the proof that the caller may configure that platform.
  */
-export async function openSelfJoinWith(authorization: string): Promise<void> {
+export async function openSelfJoinWith(
+  authorization: string,
+  platform: string = platformKey(),
+): Promise<void> {
   await dmJson(
     await fetch(`${config.dmUrl()}/api/core/users/platforms/config/`, {
       method: "POST",
       headers: { Authorization: authorization, "Content-Type": "application/json" },
-      body: JSON.stringify({ platform_key: config.mainTenantKey(), allow_self_linking: true }),
+      body: JSON.stringify({ platform_key: platform, allow_self_linking: true }),
       cache: "no-store",
     }),
   );
@@ -176,13 +191,19 @@ export const ACCESS_VALUES: readonly Access[] = ["free", "one_time", "monthly"];
 export const planName = (access: Access) =>
   access === "monthly" ? "Monthly access" : "One-time access";
 
-const metadataUrl = () => `${config.dmUrl()}/api/core/orgs/${config.mainTenantKey()}/metadata/`;
+// {platform} for the one caller that names another: releasing this app from the
+// platform it is leaving, which is no longer the stored one by then.
+const metadataUrl = (platform: string = platformKey()) =>
+  `${config.dmUrl()}/api/core/orgs/${platform}/metadata/`;
 
 type InfoRead = {
   info: AppPaymentInfo | null;
   platformName: string;
   /** The platform's own sign-in copy, which this app preserves. */
   branding: LoginBranding;
+  /** The setup wizard's answers, in the same apps.<slug> object. */
+  agent: string;
+  name: string;
 };
 
 // ponytail: 60s cache per lambda; the setup route invalidates after writing.
@@ -199,11 +220,18 @@ const isPaymentInfo = (x: unknown): x is AppPaymentInfo =>
   ACCESS_VALUES.includes((x as { access?: Access }).access as Access) &&
   typeof (x as { stripe?: unknown }).stripe === "object";
 
-/** apps.<slug> from the platform's metadata — a public read, no credential. */
-export async function readAppPaymentInfo(): Promise<InfoRead> {
-  if (infoCache && Date.now() - infoCache.at < INFO_TTL_MS) return infoCache;
+/**
+ * apps.<slug> from the platform's metadata — a public read, no credential.
+ *
+ * {fresh} skips the cache for the setup wizard's own reads: the cache is per
+ * module instance, and Next loads this file once per layer and once per function
+ * instance, so the copy the root layout renders from would serve the answer from
+ * before the wizard wrote for up to a minute.
+ */
+export async function readAppPaymentInfo(fresh = false): Promise<InfoRead> {
+  if (!fresh && infoCache && Date.now() - infoCache.at < INFO_TTL_MS) return infoCache;
   const body = await dmJson(await fetch(metadataUrl(), { cache: "no-store" }));
-  const raw = body?.metadata?.apps?.[PAYWALL_APP_SLUG];
+  const raw = body?.metadata?.apps?.[appSlug()];
   const branding = body?.metadata?.[LOGIN_BRANDING_KEY];
   infoCache = {
     at: Date.now(),
@@ -212,8 +240,106 @@ export async function readAppPaymentInfo(): Promise<InfoRead> {
     // The same read carries the platform's branding; the write needs it to
     // leave the platform's own words alone.
     branding: branding && typeof branding === "object" ? branding : {},
+    // Read off `raw`, not `info`: isPaymentInfo rejects the object until the
+    // price question is answered, and the wizard writes these before that.
+    agent: String(raw?.agent ?? ""),
+    name: String(raw?.name ?? ""),
   };
   return infoCache;
+}
+
+export type AppSetup = { platform: string; agent: string; name: string; slug: string };
+
+/**
+ * What this app is configured as: the platform from `.env.local` or env, the
+ * agent and the name from the platform's metadata, each falling back to its
+ * NEXT_PUBLIC_* key so an app configured the old way keeps working. An empty
+ * platform means nobody has answered yet, and the setup wizard takes over.
+ *
+ * The metadata read is uncached: this runs in the root layout, and the wizard
+ * reloads the page to see what it just saved. Next memoises identical fetch GETs
+ * across one render pass, so generateMetadata and the layout still share one
+ * call — one DM read per full page load.
+ */
+export async function resolveSetup(): Promise<AppSetup> {
+  const platform = platformKey();
+  if (!platform) return { platform: "", agent: "", name: "", slug: "" };
+  let stored = { agent: "", name: "" };
+  try {
+    const read = await readAppPaymentInfo(true);
+    stored = { agent: read.agent, name: read.name };
+  } catch {
+    // A public read that hiccuped must not blank a configured app: fall back
+    // to env rather than showing the wizard to everyone.
+  }
+  return {
+    platform,
+    agent: stored.agent || config.defaultAgentId(),
+    name: stored.name || config.appName(),
+    // The browser's own paywall calls key on this too (lib/paywall-client.ts).
+    slug: appSlug(),
+  };
+}
+
+/**
+ * Record the wizard's agent and name beside the paywall choice, as the admin
+ * (their own token; the DM checks the role). The DM deep-merges, so the
+ * choice's own keys survive a write that never mentions them.
+ */
+export async function writeAppConfig(
+  token: string,
+  patch: { agent?: string; name?: string },
+): Promise<void> {
+  await dmJson(
+    await fetch(metadataUrl(), {
+      method: "PUT",
+      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata: { apps: { [appSlug()]: patch } } }),
+      cache: "no-store",
+    }),
+  );
+  invalidateAppPaymentInfo();
+}
+
+/**
+ * Take this app's data off {platform} — the one it is leaving, so the caller's
+ * token has to be that platform's own (the DM refuses a token minted elsewhere).
+ * Its entry goes, and the price this app appended to the sign-in copy comes back
+ * off, leaving whatever the platform itself said.
+ *
+ * `null` is how a key is deleted here: the DM's metadata write recurses into
+ * dict values and replaces anything else, and it has no DELETE — so a key can be
+ * emptied but never removed. Every reader treats null as nothing
+ * (`isPaymentInfo` rejects it, `raw?.agent` is undefined), which is what lets the
+ * wizard reopen unanswered on the new platform.
+ *
+ * The slug is the same on both platforms: it is what names the entry here, which
+ * is exactly why the wizard keeps it across a move.
+ *
+ * Left alone on purpose: the Stripe product and price (nothing references them
+ * once the entry is gone — the same state a paid → free switch leaves), the
+ * self-join switch (this app opened it, but the platform may now depend on it),
+ * and the platform's own title and heading.
+ */
+export async function releaseApp(token: string, platform: string): Promise<void> {
+  const body = await dmJson(await fetch(metadataUrl(platform), { cache: "no-store" }));
+  const branding = body?.metadata?.[LOGIN_BRANDING_KEY];
+  await dmJson(
+    await fetch(metadataUrl(platform), {
+      method: "PUT",
+      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        metadata: {
+          apps: { [appSlug()]: null },
+          [LOGIN_BRANDING_KEY]: {
+            display_description_info: descriptionWithoutPrice(branding?.display_description_info),
+          },
+        },
+      }),
+      cache: "no-store",
+    }),
+  );
+  invalidateAppPaymentInfo();
 }
 
 /** What the login screens say under the app's name: the price, or that it is free. USD only. */
@@ -276,8 +402,9 @@ export function loginBranding(
   info: AppPaymentInfo,
   platformName: string,
   existing: LoginBranding = {},
+  appName: string = config.appName(),
 ): LoginBranding {
-  const name = config.appName() || platformName;
+  const name = appName || platformName;
   const price = priceLine(info);
   const said = descriptionWithoutPrice(existing.display_description_info);
   return {
@@ -298,6 +425,7 @@ export async function writeAppPaymentInfo(
   info: AppPaymentInfo,
   platformName: string,
   existing: LoginBranding = {},
+  appName?: string,
 ): Promise<void> {
   await dmJson(
     await fetch(metadataUrl(), {
@@ -305,8 +433,8 @@ export async function writeAppPaymentInfo(
       headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         metadata: {
-          apps: { [PAYWALL_APP_SLUG]: info },
-          [LOGIN_BRANDING_KEY]: loginBranding(info, platformName, existing),
+          apps: { [appSlug()]: info },
+          [LOGIN_BRANDING_KEY]: loginBranding(info, platformName, existing, appName),
         },
       }),
       cache: "no-store",

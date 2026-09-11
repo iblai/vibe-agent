@@ -17,116 +17,82 @@ This project is built on the ibl.ai platform using the `@iblai/iblai-js` SDK.
 When someone asks to get, clone, run, start, launch, boot, serve or publish
 this app — "get https://github.com/iblai/vibe-agent", "get
 github.com/iblai/vibe-agent", "run the server", "start it", "run it",
-"publish it" — do the steps below in this order, as one run: clone, the
-questions, install, preview, deployment, with no "shall I go on?" between
-steps (the only questions are the ones the steps name). If the repo is not
-cloned yet, `git clone https://github.com/iblai/vibe-agent` first, then do
-everything inside it (`cd vibe-agent` for every command) so this file
-governs; this section is the procedure. It needs Node 20 or newer (22
-recommended) and pnpm 11 (`corepack enable`, or `npm i -g pnpm`). It uses
-no browser: you ask, they answer, you write. The one secret that passes
-through the chat is the Platform API Token; it is written to `iblai.env` the
-moment it arrives (for the platform reads below and for deploying — the app
-itself holds no key) and never repeated. Never print `.env.local`,
-`iblai.env` or a token. Never ask for anything Stripe: the platform admin
-connects their Stripe account in the app, with one click.
+"publish it" — do the steps below in this order, as one run, with no "shall I
+go on?" between them. If the repo is not cloned yet, `git clone
+https://github.com/iblai/vibe-agent` first, then do everything inside it (`cd
+vibe-agent` for every command) so this file governs. It needs Node 20 or
+newer (22 recommended) and pnpm 11 (`corepack enable`, or `npm i -g pnpm`).
 
-1. **Platform key.** Ask for it: their platform's key, as listed on
-   https://login.iblai.app/me among the account's platforms. **`main` is
-   never it**: ibl.ai's shared default platform that everyone lands in, not
-   theirs, and this app refuses it. No platform of their own yet → they
-   create one at https://ibl.ai/join (ibl.ai's own $0 sign-up: the account
-   and a platform with them as admin); wait for "done", then ask again.
-   Check the key: `curl -fsS https://api.iblai.app/dm/api/core/orgs/<key>/metadata/`
-   is a public read, 200 means it exists (its `platform_name` is the
-   platform's name), 404 means a typo.
-2. **Platform API Token.** It reads the agent for you below and deploys
-   the app; the app itself never holds it. Ask them to create one and paste it here: in
-   https://os.ibl.ai on that platform (the org shown top left; Admin mode
-   on — the User/Admin toggle at the top right), **Integrations** in the
-   sidebar's bottom cluster → the **APIs** tab → **Add API** → API Key Name
-   `vibe-agent`, expiry left empty, Owner permissions left selected →
-   **Submit**; the key is shown once. With the pasted value, run the write
-   below at once. It is the one write for this whole procedure: an empty
-   value leaves that line alone, a line missing from an older `.env.local`
-   is appended, a non-empty token is checked against the platform first,
-   and nothing is printed but a masked confirmation.
+**The app asks its own setup questions.** The platform, the agent, the app's
+name and the price are answered in the browser, on a wizard that opens itself
+the first time the app is opened. Do not ask for any of them, do not write
+`.env.local` yourself, and never ask for anything Stripe: the platform admin
+connects their Stripe account in the app, with one click. The one secret that
+passes through the chat is the Platform API Token, and only at step 3, for
+publishing; it is written to `iblai.env` the moment it arrives and never
+repeated. Never print `.env.local`, `iblai.env` or a token.
+
+1. **Install and start.** `pnpm install --ignore-scripts`, `pnpm husky` (the
+   commit hook), and, with port 3000 free (`ss -ltnp 'sport = :3000'`),
+   `pnpm dev` in the background. Wait for "Ready". There is no env file to
+   write, and none to copy.
+2. **Hand it over.** Tell them to open http://localhost:3000 and press
+   **Start**, which signs them in with their ibl.ai account — or **Register**
+   beside it, for someone who has nothing yet: ibl.ai's own $0 sign-up makes
+   the account *and* their platform, and lands them back in the wizard past
+   the platform question. The app then asks, in order: which platform is
+   theirs — **`main` is never it**, ibl.ai's shared platform that everyone
+   lands in, and the app refuses it; **with one platform of their own it does
+   not ask at all**; none yet → the same screen has **Create your platform**,
+   ibl.ai's own $0 sign-up, and they come back signed in on the new one — then
+   which agent this app fronts (five of the platform's agents at a time, with a
+   search field for the rest, or it creates one from a name and a line), what
+   the app is called (the agent's own name, theirs to change), and finally how
+   people get in: free access, a one-time fee or a monthly fee, with the USD
+   price for a paid one. A paid answer's next screen is one button, **Connect
+   with Stripe**: they sign in on Stripe, consent, and are back. No key is typed
+   anywhere and you never touch Stripe.
+
+   Wait for them to say they are through, then check the agent answers on `/`.
+   Say once that the quiet "Payments setup" link on `/account` reopens all of
+   it. A later ask about money — "change the price", "make it free" — or about
+   the agent, the name or the platform is that screen again, not you.
+
+3. **Publish** on our hosting — part of the run, not an offer. Ask two things:
+   the name they want (`<name>.vercel.app`: lowercase letters, digits,
+   hyphens), and a **Platform API Token**, which is what deploys the app (the
+   app itself never holds one). They make it in https://os.ibl.ai on their
+   platform (the org shown top left; Admin mode on — the User/Admin toggle at
+   the top right), **Integrations** in the sidebar's bottom cluster → the
+   **APIs** tab → **Add API** → API Key Name `vibe-agent`, expiry left empty,
+   Owner permissions left selected → **Submit**; the key is shown once. With
+   the pasted value run the write below at once — it checks the token against
+   the platform first and prints nothing but a masked confirmation.
 
    ```bash
-   KEY=<key>; AGENT=; TOKEN=<pasted token>; NAME=
-   [ -f .env.local ] || cp .env.example .env.local; [ -f iblai.env ] || cp iblai.env.example iblai.env
-   [ -z "$TOKEN" ] || curl -fsS -o /dev/null -H "Authorization: Api-Token $TOKEN" https://api.iblai.app/dm/api/core/token/verify/ || { echo "token refused by the platform: ask them to paste it again"; exit 1; }
-   python3 - "$KEY" "$AGENT" "$TOKEN" "$NAME" <<'PY'
+   TOKEN=<pasted token>
+   [ -f iblai.env ] || cp iblai.env.example iblai.env
+   curl -fsS -o /dev/null -H "Authorization: Api-Token $TOKEN" https://api.iblai.app/dm/api/core/token/verify/ || { echo "token refused by the platform: ask them to paste it again"; exit 1; }
+   PLATFORM=$(curl -fsS http://localhost:3000/api/onboarding | python3 -c 'import json,sys; print(json.load(sys.stdin)["platform"])')
+   python3 - "$PLATFORM" "$TOKEN" <<'PY'
    import pathlib, re, sys
-   key, agent, tok, name = sys.argv[1:5]
-   for f, pairs in ((".env.local", [("NEXT_PUBLIC_MAIN_TENANT_KEY", key), ("NEXT_PUBLIC_DEFAULT_AGENT_ID", agent), ("NEXT_PUBLIC_APP_NAME", name)]),
-                    ("iblai.env", [("PLATFORM", key), ("TOKEN", tok)])):
-       p = pathlib.Path(f); s = p.read_text()
-       for k, v in pairs:
-           if not v: continue
-           s, n = re.subn(rf"^{k}=.*$", lambda m: f"{k}={v}", s, flags=re.M)
-           if not n: s = s.rstrip("\n") + f"\n{k}={v}\n"
-       p.write_text(s)
+   key, tok = sys.argv[1:3]
+   p = pathlib.Path("iblai.env"); s = p.read_text()
+   for k, v in (("PLATFORM", key), ("TOKEN", tok)):
+       if not v: continue
+       s, n = re.subn(rf"^{k}=.*$", lambda m: f"{k}={v}", s, flags=re.M)
+       if not n: s = s.rstrip("\n") + f"\n{k}={v}\n"
+   p.write_text(s)
    PY
-   echo "written: platform ${KEY:-unchanged}, agent ${AGENT:-unchanged}, token ${TOKEN:+${TOKEN:0:3}…${TOKEN: -2}}${TOKEN:-unchanged}, name ${NAME:-unchanged}"
+   echo "written: platform ${PLATFORM:-unset}, token ${TOKEN:0:3}…${TOKEN: -2}"
    ```
 
-   Never say the token back, not even to confirm it.
-   `NEXT_PUBLIC_PAYWALL_APP_SLUG` stays `vibe-agent`; change nothing else in
-   either file.
-
-3. **Agent.** Ask for the agent this app fronts, as the URL the OS shows
-   when the agent is open — `https://os.ibl.ai/platform/<key>/<agent-uuid>`
-   — or the uuid itself; the uuid is the last path segment. Write it: the
-   write above with `AGENT=<uuid>` and the rest empty. No agent yet → ask
-   for a name and one line on what it does, and create it with the token:
-   `POST https://api.iblai.app/dm/api/ai-mentor/orgs/<key>/users/<username>/mentor-with-settings/`
-   with `Authorization: Api-Token $TOKEN` (the value read from
-   `iblai.env` in the shell, never echoed; `<username>` is `username` in
-   `GET https://api.iblai.app/dm/api/core/token/verify/` with the same
-   header) and
-   `{"template_name": "ai-mentor", "new_mentor_name": "<name>", "display_name": "<name>", "system_prompt": "<line>"}`;
-   write the answer's `unique_id` the same way.
-4. **The app's name — suggest one.** Read the agent with the token:
-   `GET https://api.iblai.app/dm/api/ai-mentor/orgs/<key>/users/<username>/mentors/<agent-uuid>/`
-   answers with its `name` and `description`; the platform's name is
-   `platform_name` in step 1's metadata read. From those make a name people
-   would ship: two or three plain words in Title Case, with spaces, saying
-   what the agent does and for whom, reading well after "Join" and as a
-   browser tab. Keep the agent's name when it already is one (`Caveman
-Coach` stays; `caveman-coach` becomes it). Never a slug, camelCase, a
-   uuid, the platform key, `vibe-agent`, the template's `AI Mentor` /
-   `agentAI`, nor filler like "AI", "Agent", "Bot" or "App". A generic or
-   template name means the description and the platform's name decide:
-   `agentAI`, "Upbeat, encouraging tutor helping students…", platform
-   "Babatunde" → **Babatunde Tutor**; `ai-mentor`, "answers customer
-   questions about orders", platform "Acme" → **Acme Support**. Ask one
-   question with the suggestion in it — **"Call the app Babatunde Tutor?"**
-   — yes, or the name they give (theirs as typed, not reworded). Write it
-   with the write above (`NAME=<name>`, the rest empty). It is what the login
-   screens, the browser tab and the Stripe product call the app.
-5. **Install, start and preview.** `pnpm install --ignore-scripts`,
-   `pnpm husky` (the commit hook), and, with port 3000 free
-   (`ss -ltnp 'sport = :3000'`), `pnpm dev` in the background. Wait for
-   "Ready", then tell them to open http://localhost:3000 and sign in with
-   their ibl.ai account. As the platform's admin they land on `/setup`, the
-   one question: free access, one-time fee or monthly fee, and the USD
-   price for a paid one; a paid answer's second screen ("Monetize Your
-   Agent") is one button, Connect with Stripe: they sign in on Stripe,
-   consent, and are back on `/setup`; no key is typed anywhere, and you
-   never touch Stripe. Reconnect, beside Disconnect under Save, switches
-   Stripe accounts the same way.
-   Say that this is where payments are set and that the quiet "Payments
-   setup" link on `/account` reopens it; wait for them to say it is saved,
-   then check the agent answers on `/`. A later ask about money — "change
-   the price", "make it free" — is `/setup` again, not you.
-6. **Publish** on our hosting — part of the run, not an offer. Ask only the
-   name they want (`<name>.vercel.app`: lowercase letters, digits, hyphens),
-   set `package.json` `name` to it (the deploy skill's slug source), run
-   `/iblai-vibe-ops-deploy`, and report the URL it returns (Vercel may alter
-   a long or taken name). Say once what is left: the deployed origin among
-   the platform's allowed redirect origins; `tauri.conf.json` is updated by
-   the skill.
+   Never say the token back, not even to confirm it. Then set `package.json`
+   `name` to the name they chose (the deploy skill's slug source), run
+   `/iblai-vibe-ops-deploy`, and report the URL it returns (Vercel may alter a
+   long or taken name). Say once what is left: the deployed origin among the
+   platform's allowed redirect origins; `tauri.conf.json` is updated by the
+   skill.
 
 ## Component Priority
 
@@ -211,7 +177,10 @@ environment variable wins when the host exports it; copy from
 vars from it (via the skills) rather than hand-editing them. The one
 real Next env file is the gitignored `.env.local` (copy from `.env.example`):
 it needs `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`); `TOKEN` never goes
-into it — the app holds no platform key. The API/auth/websocket URLs default to hosted iblai.app in
+into it — the app holds no platform key. **In this app that is no longer
+true of the platform key**: the setup wizard keeps it in
+`data/onboarding.db` and nothing writes an env file — see "Working in this
+app" below. The API/auth/websocket URLs default to hosted iblai.app in
 `lib/iblai/config.ts` — override them in `.env.local` when self-hosting or
 when `DOMAIN` isn't `iblai.app` (map `NEXT_PUBLIC_PLATFORM_BASE_DOMAIN` ←
 `DOMAIN`, `NEXT_PUBLIC_API_BASE_URL` ← `https://api.<DOMAIN>`, and the
@@ -261,7 +230,7 @@ members of the platform pay through the creator's own Stripe account. Two kinds
 of users:
 
 - **Platform admins** (the creator and their staff) see Analytics in Admin
-  mode, answer the one setup question at `/setup`, and never pay. Admin
+  mode, answer the setup wizard at `/setup`, and never pay. Admin
   means `isTenantAdmin()` in `lib/iblai/tenant.ts` (the `is_admin` flag on the
   pinned platform in `localStorage.tenants`), never the SDK `useIsAdmin()`.
 - **Everyone else** signs in on the login SPA (an account is made there) and
@@ -274,35 +243,113 @@ of users:
 
 ### Map
 
-| Where                                                   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/(app)/`                                            | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/` (the SDK `Chat` inside the pay gate), `/analytics/*` (the SDK `AnalyticsLayout` tab strip over eight pages — Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports — Admin mode only), `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels).                                                                                                                                                                                                                                                    |
-| `app/setup/`                                            | The setup question, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). Sign-in gated by the providers like everything else.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `app/sso-login-complete/`                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `app/api/paywall/admin/connect/`                        | Connect with Stripe relay: GET the platform's Stripe source (`source`: a pasted `key`, the `connected` account, or null), POST `{return_url}` for Stripe's authorize URL, DELETE to disconnect — each forwarding the admin's own DM token to the platform's connect endpoint on their own path; statuses and bodies pass through verbatim.                                                                                                                                                                                                                                                                                                  |
-| `app/api/paywall/admin/setup/`                          | Admin rail: one route that, for a paid answer, asks the platform which Stripe source it runs on (none, or one without a publishable key → 400, nothing touched), retires the old price (a 404 there is nothing to retire: after a reconnect it lives on another account), ensures the tagged product and creates the price on that source, opens self-join, then records the choice — with the source's publishable key and account — and appends the price to the login branding without editing the platform's own title or description, forwarding the admin's own DM token. Free records the choice only: zero Stripe or connect calls. |
-| `lib/paywall.ts`, `lib/paywall-admin.ts`                | Server-only plumbing for the admin routes: identity from the caller's own token, the proxy and connect fetches on their path, the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `lib/paywall-client.ts`, `components/setup/`            | Browser side: the buyer rail straight to the platform with the member's own token (the catalogue from the public metadata, the embedded checkout session, the access check), the setup and access checks, and the setup screen (the question, then Connect with Stripe).                                                                                                                                                                                                                                                                                                                                                                    |
-| `components/pay-gate.tsx`, `components/pay-modal.tsx`   | The send gate around the SDK `Chat` (capture listeners on its composer; see "The send gate and SDK bumps") and the modal it opens: Stripe's embedded checkout form on the platform's Stripe source, Not now.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `components/sidebar/`, `lib/chat-rows.ts`               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows.                                                                                                                                                                                                                                                                                                                       |
-| `components/loading-screen.tsx`                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `lib/iblai/`                                            | `config.ts` (env accessors), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `providers/iblai-providers.tsx`, `store/iblai-store.ts` | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `.github/workflows/`                                    | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `proxy.ts`                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Where                                                   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/(app)/`                                            | Signed-in shell: the SDK sidebar (`components/sidebar/`), navbar, `AdminModeProvider`. `/` (the SDK `Chat` inside the pay gate), `/analytics/*` (the SDK `AnalyticsLayout` tab strip over eight pages — Overview, Users, Topics, Transcripts, Memory, Costs, Audit, Data Reports — Admin mode only), `/about` (card), `/profile`, `/account`, `/notifications` (full-height SDK panels).                                                                                                                                                                                                                                                                                                                                                                                |
+| `app/setup/`                                            | The setup wizard, outside `(app)` so it has no navbar (the SDK `OnboardingShell` is the page). One route per step — `start` (sign in), `platform`, `agent` (and the app's name), `access`, `connect` — and `/setup` itself is only a redirect to whichever one is unanswered. `layout.tsx` is the one gate, "platform admin, or no platform chosen yet"; the order lives in `lib/setup-steps.ts` and the screens in `components/setup/`. The platform step answers itself when the account administers exactly one and none is stored; the agent step lists five at a time and searches on the platform for the rest, and fills the app's name with the agent's own. The agent-and-name and platform steps both stay reachable afterwards, from quiet links under Save. |
+| `app/api/onboarding/`                                   | What the wizard writes: the platform to `data/onboarding.db`, the agent and the name to the platform's metadata. No admin check of its own — `openSelfJoinWith` is admin-only on the platform, so its 2xx is the proof, and it runs before anything is written.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `lib/onboarding.ts`, `lib/onboarding-client.ts`         | The platform key's file (server; never import it from `proxy.ts`, which runs on every request) and the wizard's browser calls — the platform's agents, and the trip out to ibl.ai's $0 sign-up and back through the login SPA.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `app/sso-login-complete/`                               | SSO landing, outside the auth gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `app/api/paywall/admin/connect/`                        | Connect with Stripe relay: GET the platform's Stripe source (`source`: a pasted `key`, the `connected` account, or null), POST `{return_url}` for Stripe's authorize URL, DELETE to disconnect — each forwarding the admin's own DM token to the platform's connect endpoint on their own path; statuses and bodies pass through verbatim.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `app/api/paywall/admin/setup/`                          | Admin rail: one route that, for a paid answer, asks the platform which Stripe source it runs on (none, or one without a publishable key → 400, nothing touched), retires the old price (a 404 there is nothing to retire: after a reconnect it lives on another account), ensures the tagged product and creates the price on that source, opens self-join, then records the choice — with the source's publishable key and account — and appends the price to the login branding without editing the platform's own title or description, forwarding the admin's own DM token. Free records the choice only: zero Stripe or connect calls.                                                                                                                             |
+| `lib/paywall.ts`, `lib/paywall-admin.ts`                | Server-only plumbing for the admin routes: identity from the caller's own token, the proxy and connect fetches on their path, the platform-metadata read/write. Relative imports: vitest resolves no `@/` alias.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `lib/paywall-client.ts`, `components/setup/`            | Browser side: the buyer rail straight to the platform with the member's own token (the catalogue from the public metadata, the embedded checkout session, the access check), the setup and access checks, and the setup screen (the question, then Connect with Stripe).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `components/pay-gate.tsx`, `components/pay-modal.tsx`   | The send gate around the SDK `Chat` (capture listeners on its composer; see "The send gate and SDK bumps") and the modal it opens: Stripe's embedded checkout form on the platform's Stripe source, Not now.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `components/sidebar/`, `lib/chat-rows.ts`               | The sidebar: `app-sidebar.tsx` hands the SDK `PlatformSidebar` its sections and footer config and hosts the account sheet and invite dialog; `recent-chats.tsx` is the Recents section (pinned, recent, pin / unpin / delete, infinite scroll); `flat-nav-row.tsx` is the LMS's flat row; `chat-rows.ts` labels rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `components/loading-screen.tsx`                         | The one loading / busy screen (the OS look: white, centred brand-blue arc). Full page by default; `overlay` covers the viewport while something saves or redirects.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `lib/iblai/`                                            | `config.ts` (env accessors), `tenant.ts`, `admin-mode.tsx`, `auth-utils.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `providers/iblai-providers.tsx`, `store/iblai-store.ts` | SDK providers and the Redux store. The slice keys are hard-coded in the SDK; keep them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `.github/workflows/`                                    | `release.yml`: release-it on every push to `main` (version, `CHANGELOG.md`, tag, GitHub Release; the first release is 1.0.0). `tauri-build-desktop.yml`: unsigned desktop bundles on demand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `proxy.ts`                                              | CSP (`applyCsp`) and the 404 for `/about` when the flag is off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### Invariants, and why
 
-- The platform comes from `NEXT_PUBLIC_MAIN_TENANT_KEY` only (`resolveAppTenant()`).
-  No localStorage fallback: every vibe app on localhost writes `app_tenant`, and it
-  silently overrode env. A missing or placeholder key renders an alert.
-- The agent and the app's name are env: `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the
-  uuid at the end of the agent's `os.ibl.ai/platform/<platform-key>/<agent-uuid>`
-  URL) and `NEXT_PUBLIC_APP_NAME`, written by the Get and run procedure, read
-  through `config.defaultAgentId()` / `config.appName()`, carried to a deploy
-  by the deploy skill's `NEXT_PUBLIC_*` allowlist. Never in the platform's
-  metadata (that store is the paywall choice), never invented: ask for the
-  OS URL.
+- **Every onboarding step is a URL**, and `/setup` is only a redirect to
+  whichever one the app is on (`currentSetupStep()` in `lib/setup-steps.ts`) — so
+  every caller keeps linking to plain `/setup` and none of them knows the order:
+  the admin redirect in the app shell, the quiet "Payments setup" link on
+  `/account`, the no-agent alert on `/`, the return path saved before signing in.
+  A reload keeps its place, Back moves between questions, a step can be linked
+  to, and Stripe's consent comes back to `/setup/connect` with
+  `?stripe_connect=`, the step that owns it and where the retry button is.
+  ibl.ai's $0 sign-up returns to none of them: the account it makes has no
+  session in this browser, so a return landing on a page of this app would be an
+  unauthenticated visitor and the providers would send them away before anything
+  could finish the sign-in. Its `redirect_url` is the login SPA's own sign-in
+  page with `/setup` nested inside (`createPlatformUrl` → `authLoginUrl`); the DM
+  merges `platform_key`, `email`, `exists`, `stripe_checkout_id` and an
+  `edx_jwt_token` into that query string without disturbing the nested value, and
+  the SPA signs the account in on the new platform and hands back through
+  `/sso-login-complete`. A step that no longer applies sends the visitor on
+  (`stepApplies()`): `/setup/start` once signed in, `/setup/platform` once one is
+  stored, anything under `/setup` before one is. With no platform the providers
+  render `/setup/*` and redirect every other page to the current step, instead of
+  drawing the wizard over whatever URL was asked for. The screens stay one
+  component taking `step` as a prop (`components/setup/setup-screen.tsx`): the
+  price step and the Stripe step share the answer in progress, and splitting them
+  would push it through storage for nothing. The order and the guards are pure
+  functions in a `.ts` module because that is what vitest collects.
+- **No env file is ever written or required.** The app configures itself, and
+  the answers live in two places for one reason. The **platform** is a row in
+  `data/onboarding.db`, a SQLite database the app owns (`platformKey()` in
+  `lib/onboarding.ts`, `node:sqlite` — stdlib, no dependency). It cannot live
+  in the platform's metadata, because reading that metadata needs it. The
+  **agent** and the app's **name** have no such problem and live in the
+  platform's metadata beside the paywall choice (`apps.<slug>.agent` /
+  `.name`, `resolveSetup()` in `lib/paywall.ts`), so a deployed app can still
+  change them. `NEXT_PUBLIC_MAIN_TENANT_KEY`, `NEXT_PUBLIC_DEFAULT_AGENT_ID`
+  and `NEXT_PUBLIC_APP_NAME` remain a per-value fallback for an app configured
+  the old way or by a self-hoster; the store wins. Never from localStorage:
+  every vibe app on localhost writes `app_tenant`, and it silently overrode env.
+- The database rides the deploy zip and is read there read-only — that is how a
+  published app comes up configured, since the deploy skill builds
+  `.env.production` from a `.env.local` that no longer exists. It needs
+  `outputFileTracingIncludes` in `next.config.ts` to reach the function bundle.
+  A published app therefore cannot change its platform: set it up locally again
+  and publish. Everything else on `/setup` still works there.
+- **The platform can be changed, and the one left behind is released.** Locally,
+  `/setup/platform` is reachable for good (a quiet link on the price step) and
+  picking another one says what it clears before the button, which then reads
+  "Change platform". Order is forced by the tokens: a `dm_token` is minted for one
+  platform and refused on any other path, so the browser keeps the current one,
+  moves first (`POST /api/onboarding`) and only then releases the old platform
+  with that saved token (`DELETE /api/onboarding?platform=`). Moving first is what
+  makes the failure modes benign — a deployed app's read-only filesystem refuses
+  the move before anything is destroyed, and a release that fails afterwards
+  leaves the app correctly moved and says the old copy is still there.
+  `releaseApp()` in `lib/paywall.ts` writes `apps.<slug>: null` and takes back the
+  price it appended to the sign-in copy (`descriptionWithoutPrice`), leaving the
+  platform's own words, its Stripe product and price (nothing references them
+  once the entry is gone — the state a paid → free switch already leaves) and its
+  self-join switch alone. **`null` is how a key is deleted here**: the platform's
+  metadata write recurses into dicts and replaces anything else, and has no
+  DELETE. The slug is kept across the move — it is what names the entry being
+  released — and the new platform has no `apps.<slug>`, so the wizard reopens at
+  the agent step on its own, with nothing carried over.
+- **The app mints its own slug.** `apps.<slug>` in the platform's metadata keys
+  the paywall choice, the agent and the name, and the slug tags the Stripe
+  product (`metadata.app`, which the platform's checkout enforces). It used to be
+  the constant `vibe-agent` for every install, so two apps on one platform
+  overwrote each other. The wizard now mints `<slug-of-the-name>_<uuid>`
+  (`makeSlug()`) the first time the app is named, and stores it beside the
+  platform. **Once, and never again**: a rename keeps it, because regenerating
+  would orphan both the metadata entry and the Stripe product. An app set up
+  before this keeps `vibe-agent` — it has none stored, and that is where its
+  entry already is. The ladder is stored → `NEXT_PUBLIC_PAYWALL_APP_SLUG` →
+  `vibe-agent`, and `appSlug()` in `lib/paywall.ts` is a function, not a
+  constant, for the same reason `platformKey()` is: it is answered during setup,
+  so reading it once at import would freeze whatever was true at boot.
+- **Every key has a code default.** `.env.example` is a list of knobs, not a
+  setup step, and nothing copies it. That is why `paywallAppSlug()` and
+  `tauriCustomScheme()` default in `lib/iblai/config.ts`: a fresh clone has no
+  env file, and an empty slug would key the platform's metadata as `apps[""]`
+  and 500 every admin route before doing anything.
+- The browser gets all three through `window.__ENV__`, written from a prop by
+  `providers/iblai-providers.tsx` before `initializeDataLayer` —
+  **non-empty values only**. `getEnv` coalesces with `??`, so an empty string
+  there beats the build-time value instead of falling through to it, and an
+  app configured through `.env.local` would go blank. Nothing re-renders when
+  that object changes, so every wizard save ends in a full page load.
 - Accounts are the platform's: every visitor without a session goes to the
   login SPA's join page for the platform (`authJoinUrl` in
   `lib/iblai/auth-utils.ts`, every part from env), which makes the account
@@ -372,6 +419,8 @@ on the server):
 | mint the embedded checkout session, verify the completed session and record it, live standing                                                    | the browser                | the member's own DM `Token`              | the member |
 | ask the Stripe source, retire/create product and price (paid only), open self-join, record the choice and append the price to the login branding | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
 | Connect with Stripe: status, start (the authorize URL), disconnect                                                                               | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
+| the wizard's platforms and agents (list, create)                                                                                                 | the browser                | the admin's own edX JWT / DM `Token`     | the admin  |
+| open self-join as proof of admin, then record the agent and the name                                                                             | this server, from `/setup` | the admin's own DM `Token`, forwarded    | the admin  |
 
 Why the browser mints the checkout itself: an embedded Checkout Session's
 `client_secret` needs a Stripe secret, so the platform mints it — and the
@@ -546,16 +595,19 @@ it, pass the gate's verdict through the prop and delete the listeners.
 
 ### Environment
 
-`.env.local` (gitignored; copy from `.env.example`). Nothing in it is a secret:
+**Nothing is required and nothing writes an env file.** `.env.example` is the
+list of knobs; `.env.local` (gitignored) is where you would set one. Nothing in
+either is a secret. The three the wizard answers are a per-value fallback only —
+the store wins.
 
-| Key                                                            | When missing                                                                                                                   |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_MAIN_TENANT_KEY`                                  | an alert instead of the app                                                                                                    |
-| `NEXT_PUBLIC_DEFAULT_AGENT_ID`                                 | an alert on `/`, `/analytics` and `/about`                                                                                     |
-| `NEXT_PUBLIC_APP_NAME`                                         | "vibe-agent" in the tab, the platform's name on the login screens and the Stripe product                                       |
-| `NEXT_PUBLIC_PAYWALL_APP_SLUG`                                 | the admin routes 500 naming it, and the browser asks the platform about an unnamed app (its checkout 400s) — loudly, by design |
-| `NEXT_PUBLIC_SHOW_ABOUT`                                       | About hidden (the default)                                                                                                     |
-| `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_TAURI_CUSTOM_SCHEME` | code defaults                                                                                                                  |
+| Key                                                            | When missing                                                                                                                 |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_MAIN_TENANT_KEY`                                  | the stored answer, else the setup wizard instead of the app                                                                  |
+| `NEXT_PUBLIC_DEFAULT_AGENT_ID`                                 | the stored answer, else the wizard's agent step; an alert on `/`, `/analytics` and `/about` for anyone who is not an admin   |
+| `NEXT_PUBLIC_APP_NAME`                                         | the stored answer, else "vibe-agent" in the tab and the platform's name on the login screens and the Stripe product          |
+| `NEXT_PUBLIC_PAYWALL_APP_SLUG`                                 | `vibe-agent`, the code default. Set it to an EMPTY value and the admin routes 500 naming it — the only misconfiguration left |
+| `NEXT_PUBLIC_SHOW_ABOUT`                                       | About hidden (the default)                                                                                                   |
+| `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_TAURI_CUSTOM_SCHEME` | code defaults                                                                                                                |
 
 `iblai.env` (`DOMAIN`, `PLATFORM`, `TOKEN`) feeds the skills and the Get and
 run procedure, not the app. Never echo `TOKEN`.
@@ -584,6 +636,40 @@ the flag off.
   `pnpm dlx shadcn@latest add <name> -y` (the style is `base-nova`), then
   `pnpm fmt` the new files.
 - vitest resolves no `@/` alias: anything a test imports uses relative paths.
+- vitest collects `__tests__/**/*.test.ts` only, in the node environment: a
+  `.tsx` test silently never runs. Keep logic a test must hold in a `.ts`
+  module — that is why `applySetupToEnv` lives in `lib/onboarding-client.ts`
+  and not in the provider that calls it.
+- Anything reading a file from the app must take a literal filename:
+  `join(process.cwd(), name)` with a variable makes Turbopack warn on every
+  build that it cannot trace what the server bundle may read.
+- A test that reaches `lib/onboarding.ts` must redirect `process.cwd()`
+  (`vi.spyOn(process, "cwd")`), or it reads the developer's own `data/` and
+  passes or fails by accident — **including the ones that only reach it through
+  `lib/paywall.ts`**: `platformKey()` is behind every `orgs/<platform>/` URL, the
+  stored platform beats env by design, and the three paywall suites went red the
+  day this app was first set up locally. They point `cwd` at a path that does not
+  exist (`NO_DATABASE`), which is what "no database" means. To test the
+  unwritable case, put a _file_ where `data/` has to go — `mkdirSync(recursive)`
+  happily creates any writable path, and pointing `cwd` at `/proc/...` hangs
+  vitest outright.
+- **A server module is instantiated once per Next layer** — `next dev` compiles
+  `lib/onboarding.ts` as both `[app-route]` and `[app-rsc]` (grep
+  `.next/dev/server/chunks/**` for the tag) — and once per function instance on
+  the hosting. So an `invalidate()` a route handler calls never reaches the copy
+  the root layout renders from, and on Vercel the POST and the next render need
+  not share a process. That is why nothing the wizard answers (platform, slug,
+  agent, name) is memoised at module scope: `readRow()` re-reads the database
+  every call (55 µs), and `resolveSetup()` passes `fresh` to skip
+  `readAppPaymentInfo`'s 60 s cache. Next memoises identical `fetch` GETs across
+  one render pass, so `generateMetadata` and the layout still share one DM read;
+  that memoisation does not apply in route handlers, which is where the 60 s
+  cache still earns its keep.
+- `node:sqlite` prints a one-time `ExperimentalWarning` on every cold start, in
+  the dev server, the production server and the test run. Expected.
+- `getAuthSpaJoinUrl` answers `""` with no tenant, so the wizard's sign-in is
+  the SDK's platform-less _login_ URL (`authLoginUrl`), not the join page every
+  other trip uses.
 - oxfmt formats Markdown too and pads tables; when editing README rows by script,
   match on the row prefix.
 - Turbopack's built CSS lives in `.next/static/chunks/*.css`.
@@ -632,10 +718,12 @@ the flag off.
   workflow that must run on the `v*` tag needs a personal access token, as
   in the OS.
 - The deploy skill builds `.env.production` from `.env.local` through a key
-  allowlist (`NEXT_PUBLIC_*`, `IBLAI_API_KEY`, `PAYWALL_*`, `CSP_MODE`) and
-  drops everything else: everything this app needs is `NEXT_PUBLIC_*` (the
-  platform key, the agent, the name, the slug), so it all passes; there is
-  no token to carry.
+  allowlist (`NEXT_PUBLIC_*`, `IBLAI_API_KEY`, `PAYWALL_*`, `CSP_MODE`). This
+  app has no `.env.local` any more, so that file comes out empty and carries
+  nothing — which is fine, because the platform rides in `data/onboarding.db`
+  (the zip excludes by its own list, not `.gitignore`, and the DM's own
+  skip-list leaves `data/` alone) and the agent, the name and the paywall
+  choice are all in the platform's metadata. There is no token to carry either.
 - The app no longer creates users. It did, through SCIM
   (`/api/orgs/<key>/scim/v2/Users`), until the DM's create turned out to mask
   every edX error as 500 "Failed to create user in edX - no response

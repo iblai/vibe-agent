@@ -78,6 +78,20 @@ describe("redirectToAuthSpa", () => {
   });
 });
 
+describe("authLoginUrl", () => {
+  it("names no platform — the setup wizard's one door, before a platform exists", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "";
+    vi.resetModules();
+    const url = new URL((await load()).authLoginUrl("http://localhost:3000"));
+    expect(url.origin + url.pathname).toBe("https://login.example.test/login");
+    // redirect-to and nothing else: no tenant (none is known yet) and no app
+    // (the SPA maps a missing one to mentorai, the branding key this app uses).
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      "redirect-to": "http://localhost:3000",
+    });
+  });
+});
+
 describe("handleLogout", () => {
   it("clears the app's state and goes to the SPA's logout page", async () => {
     const { handleLogout } = await load();

@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * The /api/paywall/admin routes are the app's only server rail and the only
  * writers of the platform's paywall choice, so their contracts are
  * load-bearing: sign-in-first 401s, a LOUD 500 when NEXT_PUBLIC_PAYWALL_APP_SLUG
- * is missing (misconfiguration must fail visibly the moment a route is used),
+ * is explicitly blanked (it defaults in code, so only that is a
+ * misconfiguration, and it must fail visibly the moment a route is used),
  * the admin's OWN token going to the platform on their own path (the app holds
  * no platform key), a paid answer refused before any Stripe call while the
  * platform has no Stripe source, the Stripe objects created in order on that
@@ -170,6 +173,14 @@ const stripeDm =
     return answer instanceof Response ? answer : Response.json(answer);
   };
 
+/**
+ * A working directory with no data/onboarding.db in it. These suites pin the
+ * env ladder, and the stored platform beats env by design — without this they
+ * read the developer's own database and fail once this app has been set up
+ * locally.
+ */
+const NO_DATABASE = join(tmpdir(), "vibe-agent-no-database");
+
 beforeEach(() => {
   vi.resetModules();
   for (const key of ENV_KEYS) {
@@ -179,9 +190,11 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.edu";
   process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "testorg";
   process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "demo-app";
+  vi.spyOn(process, "cwd").mockReturnValue(NO_DATABASE);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   for (const key of ENV_KEYS) {
     if (saved[key] === undefined) delete process.env[key];
@@ -221,8 +234,8 @@ describe("POST /api/paywall/admin/setup", () => {
     expect(metaWrites).toHaveLength(0);
   });
 
-  it("500s loudly when NEXT_PUBLIC_PAYWALL_APP_SLUG is unset — an unconfigured route fails visibly when used", async () => {
-    delete process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG;
+  it("500s loudly when NEXT_PUBLIC_PAYWALL_APP_SLUG is blanked — the slug defaults in code, so only an explicit empty value is a misconfiguration", async () => {
+    process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "";
     stubFetch();
     const { POST } = await loadSetup();
     const res = await POST(post({ access: "free" }));
@@ -566,8 +579,8 @@ describe("/api/paywall/admin/connect", () => {
     expect(connectCalls).toHaveLength(0);
   });
 
-  it("500s loudly when NEXT_PUBLIC_PAYWALL_APP_SLUG is unset", async () => {
-    delete process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG;
+  it("500s loudly when NEXT_PUBLIC_PAYWALL_APP_SLUG is blanked", async () => {
+    process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "";
     stubFetch();
     const { GET } = await loadConnect();
     const res = await GET(request("GET"));

@@ -96,7 +96,10 @@ const config = {
   wsUrl: () => getEnv("NEXT_PUBLIC_BASE_WS_URL", `wss://asgi.data.${domain()}`),
 
   mainTenantKey: () => getEnv("NEXT_PUBLIC_MAIN_TENANT_KEY", ""),
-  tauriCustomScheme: () => getEnv("NEXT_PUBLIC_TAURI_CUSTOM_SCHEME", ""),
+  // Defaulted in code for the same reason as the slug: .env.example used to
+  // ship this value, and nothing writes an env file any more. Mobile Tauri
+  // returns from SSO on this scheme; desktop and web ignore it.
+  tauriCustomScheme: () => getEnv("NEXT_PUBLIC_TAURI_CUSTOM_SCHEME", "vibe-agent"),
 
   // The one agent this app fronts: the last path segment of an
   // os.ibl.ai/platform/<platform-key>/<agent-uuid> URL.
@@ -112,7 +115,13 @@ const config = {
   // `metadata.app` tag (the platform's checkout rule) and the key under
   // `apps.<slug>` in the platform's public metadata, where the paywall choice
   // is recorded. The browser and the admin routes read the same value.
-  paywallAppSlug: () => getEnv("NEXT_PUBLIC_PAYWALL_APP_SLUG", ""),
+  // The fallback only. The setup wizard mints this app its own slug from its
+  // name and stores it (lib/onboarding.ts, `appSlug()` in lib/paywall.ts); this
+  // is what an app set up before that keeps using, and what a brand-new one uses
+  // for the moment between choosing a platform and naming itself. Defaulted in
+  // code because a working app never needs an env file, and an empty slug would
+  // key the platform's metadata as apps[""] and refuse every admin route.
+  paywallAppSlug: () => getEnv("NEXT_PUBLIC_PAYWALL_APP_SLUG", "vibe-agent"),
 };
 
 export default config;

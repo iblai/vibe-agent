@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Chat, type ChatConfig } from "@iblai/iblai-js/web-containers/next";
 import {
@@ -89,9 +90,11 @@ function AgentChat() {
   if (!mentorId) {
     return (
       <p role="alert" className="p-8 text-sm text-destructive">
-        No agent is configured: set NEXT_PUBLIC_DEFAULT_AGENT_ID in .env.local to the agent’s uuid,
-        the last path segment of its os.ibl.ai URL (the Get and run procedure in AGENTS.md writes
-        it).
+        No agent is configured yet. A platform admin chooses one on{" "}
+        <Link className="underline underline-offset-4" href="/setup">
+          the setup screen
+        </Link>
+        .
       </p>
     );
   }

@@ -41,9 +41,10 @@ export function saveTokens(tokens: PlatformTokens | undefined): void {
  * itself succeeded, and whatever the stale token cannot do says so with the
  * platform's own message where it happens.
  */
-export async function mintPlatformTokens(): Promise<boolean> {
+export async function mintPlatformTokens(
+  platform: string = config.mainTenantKey(),
+): Promise<boolean> {
   const jwt = localStorage.getItem("edx_jwt_token") ?? "";
-  const platform = config.mainTenantKey();
   if (!jwt || !platform) {
     console.error("[ibl.ai] no edX token or platform: tokens not minted");
     return false;

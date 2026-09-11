@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import config from "../../../../../lib/iblai/config";
 import {
   ACCESS_VALUES,
-  PAYWALL_APP_SLUG,
+  appSlug,
   PaywallUpstreamError,
   dmConnectFetchAs,
   dmJson,
@@ -113,16 +113,15 @@ export async function POST(req: NextRequest) {
         } catch (e) {
           if (!(e instanceof PaywallUpstreamError && e.status === 404)) throw e;
         }
-        if (product?.active === false || product?.metadata?.app !== PAYWALL_APP_SLUG)
-          productId = null;
+        if (product?.active === false || product?.metadata?.app !== appSlug()) productId = null;
       }
       if (!productId) {
         const product = await stripe("/products/", {
           method: "POST",
           headers: idem("product"),
           body: JSON.stringify({
-            name: config.appName() || platformName || PAYWALL_APP_SLUG,
-            metadata: { app: PAYWALL_APP_SLUG },
+            name: config.appName() || platformName || appSlug(),
+            metadata: { app: appSlug() },
           }),
         });
         productId = String(product.id);

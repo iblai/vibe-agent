@@ -13,6 +13,10 @@
 # testing
 /coverage
 
+# the setup wizard's answer for THIS checkout; it still rides the deploy zip,
+# which excludes by its own list rather than by this file
+/data
+
 # next.js
 /.next/
 /out/

@@ -24,7 +24,7 @@ A single-platform app on ibl.ai: users sign in with ibl.ai SSO and chat with one
 
 <!-- Once deployed: "vibe-agent is deployed at [<host>](https://<host>)." -->
 
-vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode and answer the one setup question; **everyone else** signs in on login.iblai.app (an account is made there in a minute) and lands in the chat as a member. When the admin chose a fee, the first message a member sends opens a pay modal; paying on the creator's own Stripe Checkout unlocks the agent. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
+vibe-agent fronts one agent for one platform on [ibl.ai](https://ibl.ai). A creator (the platform admin) points it at an agent built on [os.ibl.ai](https://os.ibl.ai), decides whether access is free or paid, and members sign in with SSO to chat. Two kinds of users: **platform admins** (the creator and their staff) see Analytics in Admin mode and answer the setup wizard (platform, agent, name, price); **everyone else** signs in on login.iblai.app (an account is made there in a minute) and lands in the chat as a member. When the admin chose a fee, the first message a member sends opens a pay modal; paying on the creator's own Stripe Checkout unlocks the agent. Everything is the SDK's — the shell, the chat, the analytics, the profile and account panels — connected to [iblai.app](https://iblai.app).
 
 ## Screenshots
 
@@ -73,7 +73,7 @@ Start Claude Code in the terminal (`claude`) and say:
 get https://github.com/iblai/vibe-agent
 ```
 
-It clones the repo and, as soon as it reads a file in it, follows the procedure in `AGENTS.md` in one run. It asks for your platform key (listed on [login.iblai.app/me](https://login.iblai.app/me); never the shared `main` platform, that one is everyone's, not yours; no platform yet → [ibl.ai/join](https://ibl.ai/join)), for a Platform API Token you create in the OS (os.ibl.ai → Integrations → APIs → Add API; paste it in the chat and it goes into `iblai.env`, for deploying, never repeated; the app itself holds no key), and for your agent's URL from os.ibl.ai; suggests a name for the app; installs and starts the dev server and tells you to sign in — as the platform admin you land on `/setup`, the one setup question (free, one-time or monthly and the price; a paid answer's next screen is one button, Connect with Stripe: sign in on Stripe and you are back); then publishes the app on ibl.ai hosting as `<name>.vercel.app`, asking only for the name. If it only clones, say `follow AGENTS.md`; or start inside the clone — `git clone https://github.com/iblai/vibe-agent && cd vibe-agent && claude` — and say `run it`.
+It clones the repo, installs it and starts the dev server, then tells you to open http://localhost:3000 and press **Start**. The app asks the rest itself, in the browser: you sign in with your ibl.ai account, choose which platform is yours (never the shared `main` — that one is everyone's; no platform yet → **Create your platform**, right there, free), choose or create the agent this app fronts, name the app, and answer how people get in (free, one-time or monthly, and the price; a paid answer's next screen is one button, Connect with Stripe: sign in on Stripe and you are back). Claude asks for nothing but the name for the address and a Platform API Token when it publishes the app on ibl.ai hosting as `<name>.vercel.app` (os.ibl.ai → Integrations → APIs → Add API; it goes into `iblai.env`, for deploying, never repeated — the app itself holds no key). If it only clones, say `follow AGENTS.md`; or start inside the clone — `git clone https://github.com/iblai/vibe-agent && cd vibe-agent && claude` — and say `run it`.
 
 By hand:
 
@@ -85,22 +85,16 @@ By hand:
 
    `PLATFORM` is your platform key (listed on https://login.iblai.app/me); `TOKEN` is a Platform API Token (os.ibl.ai → Integrations, in the sidebar's bottom cluster → APIs → Add API; the key is shown once).
 
-2. App env goes in `.env.local`:
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Fill `NEXT_PUBLIC_MAIN_TENANT_KEY` (= `PLATFORM`), `NEXT_PUBLIC_DEFAULT_AGENT_ID` (the agent's uuid, the last path segment of `https://os.ibl.ai/platform/<platform-key>/<agent-uuid>`) and `NEXT_PUBLIC_APP_NAME` (what the login screens, the browser tab and the Stripe product call the app: two or three plain words in Title Case, e.g. `Babatunde Tutor`, never a slug). `TOKEN` never goes into `.env.local`: the app holds no platform key. The API, auth and websocket URLs default to hosted iblai.app in `lib/iblai/config.ts`. A missing or placeholder platform key shows an alert instead of an app; a missing agent shows one on `/`.
-
-3. Install and run:
+2. Install and run:
 
    ```bash
    pnpm install --ignore-scripts
    pnpm dev
    ```
 
-   Open http://localhost:3000 and sign in. As the platform admin you land on `/setup`, the one setup question (see Paywall below). Every origin the app runs on (localhost and the deployed one) must be in the platform's allowed redirect origins, or sign-in never comes back.
+   Open http://localhost:3000 and press **Start**. The app asks for the platform, the agent, the app's name and the access question, and keeps the answers itself — the platform in `data/onboarding.db`, a small SQLite database it owns, and the agent and the name in the platform's own metadata, so a deployed app can still change those. Naming the app also mints it a slug of its own — `<name>_<uuid>` — which is how two apps on one platform keep their settings apart; it is minted once and survives a rename. **There is no env file to create**: every key has a default in `lib/iblai/config.ts`, and `.env.example` is a list of knobs (self-hosting URLs, the About flag) rather than a setup step. `TOKEN` never goes near the app: it holds no platform key.
+
+   Every origin the app runs on (localhost and the deployed one) must be in the platform's allowed redirect origins, or sign-in never comes back.
 
 ### Build
 
@@ -176,7 +170,7 @@ A price made this way is sold only once it is the recorded one (`apps.vibe-agent
 
 ## Deployment
 
-`/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`; everything the app needs is `NEXT_PUBLIC_*` and passes the skill's allowlist — confirm `NEXT_PUBLIC_PAYWALL_APP_SLUG` is among them, or the setup route 500s in production and the browser asks the platform about an unnamed app. There is no token to carry: the app holds none. Server mode is required: never set `output: 'export'`. Afterwards:
+`/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`, which this app does not have, so that file carries nothing — the platform rides in `data/onboarding.db` (the zip excludes by its own list, not `.gitignore`, and `outputFileTracingIncludes` puts the file in the function bundle), and the agent, the name and the paywall choice are in the platform's metadata. There is no token to carry: the app holds none. Server mode is required: never set `output: 'export'`. Afterwards:
 
 - add the deployed origin to the platform's allowed redirect origins;
 - put it in `src-tauri/tauri.conf.json` → `build.frontendDist` (see below).
@@ -250,19 +244,23 @@ app/
 │   ├── page.tsx                        # Chat — SDK <Chat> inside the pay gate (?session= restores, ?new= starts fresh)
 │   ├── analytics/                      # SDK <AnalyticsLayout> over eight pages
 │   ├── about/  profile/  account/  notifications/[[...id]]/
-├── setup/                              # The one setup question (outside the shell, no navbar)
+├── setup/                              # The setup wizard (outside the shell, no navbar)
 ├── sso-login-complete/                 # SSO landing
-└── api/paywall/admin/
-    ├── setup/                          # Admin rail — forwards the admin's own platform token
-    └── connect/                        # Connect with Stripe relay — same token; GET status, POST start, DELETE
+└── api/
+    ├── onboarding/                     # What the setup wizard writes: the platform to data/onboarding.db, the agent and name to platform metadata
+    └── paywall/admin/
+        ├── setup/                      # Admin rail — forwards the admin's own platform token
+        └── connect/                    # Connect with Stripe relay — same token; GET status, POST start, DELETE
 components/
 ├── sidebar/                            # app-sidebar.tsx (PlatformSidebar wrapper), recent-chats.tsx, chat-row.tsx, flat-nav-row.tsx
 ├── navbar/                             # nav-bar.tsx, logo.tsx, user-profile-button.tsx, admin-mode-switch.tsx
-├── setup/setup-screen.tsx              # The question, then Connect with Stripe
+├── setup/                              # start-screen.tsx (press Start), setup-screen.tsx (platform → agent and name → the question → Connect with Stripe)
 ├── loading-screen.tsx                  # The one loading / busy screen (OS look)
 └── pay-gate.tsx  pay-modal.tsx         # The send gate around <Chat>, and the pay modal it opens (Stripe's embedded checkout)
 lib/
-├── paywall.ts  paywall-admin.ts        # Server-only: the admin routes' plumbing, platform-metadata store
+├── onboarding.ts                       # Server-only: the platform key in data/onboarding.db (the one answer metadata cannot hold)
+├── onboarding-client.ts                # Browser side of the wizard: agents, the runtime env, ibl.ai's sign-up return
+├── paywall.ts  paywall-admin.ts        # Server-only: the admin routes' plumbing, platform-metadata store, resolveSetup
 ├── paywall-client.ts                   # Browser side: the buyer rail straight to the platform (catalogue, checkout, access), setup and access checks
 ├── chat-rows.ts                        # Recents row labels
 └── iblai/                              # config.ts (env), tenant.ts, admin-mode.tsx, auth-utils.ts, storage-service.ts
@@ -290,7 +288,7 @@ src-tauri/                              # Thin WebView shell for desktop and mob
 1. Clone the repo
 2. Install dependencies: `pnpm install --ignore-scripts`
 3. `pnpm husky` once: the install skips `prepare`, so the commit-msg hook (commitlint) is not there otherwise
-4. Fill `iblai.env` and `.env.local` (see Quick Start), then `pnpm dev`
+4. Fill `iblai.env` (see Quick Start), then `pnpm dev` and press Start
 
 ### Development Workflow
 
@@ -307,7 +305,7 @@ src-tauri/                              # Thin WebView shell for desktop and mob
 - **Do not override SDK styles** — SDK components ship with their own styling
 - **Never set `output: 'export'`** — the paywall needs the server routes
 - **The app holds no platform secret** — no `IBLAI_API_KEY`, no Stripe key; the buyer's own token and the admin's own token are the only credentials it sends, and secrets never go into platform metadata (everything under `apps.<slug>` is public by design)
-- **A new env key lands in `.env.example` and this README** in the same change; a new route lands with a test in `__tests__/`
+- **A new env key lands in `.env.example` with a code default and in this README** in the same change; a new route lands with a test in `__tests__/`
 - **Use `pnpm`** as the package manager
 
 ### Adding Features

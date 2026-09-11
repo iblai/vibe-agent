@@ -46,6 +46,26 @@ function getRedirectOrigin(): string {
 export const authJoinUrl = (origin: string) =>
   `${config.authUrl()}/join?tenant=${encodeURIComponent(resolveAppTenant())}&redirect-to=${encodeURIComponent(origin)}`;
 
+/**
+ * The login SPA's sign-in page with no platform named — the setup wizard's one
+ * door, for the moment before a platform has been chosen and `authJoinUrl`
+ * therefore cannot be built (the SDK's own `getAuthSpaJoinUrl` answers "" with
+ * no tenant). This is the SDK's own platform-less shape: `redirectToAuthSpa`
+ * appends `&tenant=` only when a platform is known. It also sends `app=`, which
+ * this does not: `authJoinUrl` — the trip proven in production — sends none
+ * either, and the SPA maps a missing one to `mentorai`, the branding key this
+ * app's login screens already use. The signed-in visitor comes back through
+ * /sso-login-complete and the wizard then asks which platform is theirs.
+ *
+ * {returnTo} may carry a path, not only an origin: the SPA splits it into its
+ * own `redirect-to` and `redirect-path` and hands both back. That is what lets
+ * this double as the target ibl.ai's $0 sign-up returns to
+ * (`createPlatformUrl`), so the browser is signed in before it ever reaches a
+ * page of this app.
+ */
+export const authLoginUrl = (returnTo: string) =>
+  `${config.authUrl()}/login?redirect-to=${encodeURIComponent(returnTo)}`;
+
 /** Where SsoLogin sends the browser once the Auth SPA returns (the key it reads, then clears). */
 export const saveReturnPath = (path: string) => localStorage.setItem("redirectTo", path);
 

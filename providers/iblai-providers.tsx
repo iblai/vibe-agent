@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Provider as ReduxProvider } from "react-redux";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { initializeDataLayer, type TokenResponse } from "@iblai/iblai-js/data-layer";
 import { AuthProvider, TenantProvider, ServiceWorkerProvider } from "@iblai/iblai-js/web-utils";
 import { Toaster } from "sonner";
@@ -32,8 +32,20 @@ import config from "@/lib/iblai/config";
 import { checkTenantMismatch, resolveAppTenant } from "@/lib/iblai/tenant";
 import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
 import { mintPlatformTokens, saveTokens } from "@/lib/iblai/tokens";
+import type { AppSetup } from "@/lib/paywall";
+import { applySetupToEnv } from "@/lib/onboarding-client";
+import { currentSetupStep, readAnswered, setupPath } from "@/lib/setup-steps";
 
 const storageService = LocalStorageService.getInstance();
+
+/** An unconfigured app was asked for some other page: the wizard's current step instead. */
+function RedirectToSetup() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(setupPath(currentSetupStep(readAnswered())));
+  }, [router]);
+  return <LoadingScreen />;
+}
 
 // The SDK dropdown labels its learner-mode item "Learner / Instructor"; this
 // app calls the modes User / Admin. Deep-merged over the SDK's English catalog.
@@ -46,7 +58,7 @@ const PUBLIC_ROUTES = new Map<RegExp, () => Promise<boolean>>([
   [new RegExp("^/sso-login"), async () => false],
 ]);
 
-export function IblaiProviders({ children }: { children: ReactNode }) {
+export function IblaiProviders({ children, setup }: { children: ReactNode; setup: AppSetup }) {
   const pathname = usePathname();
 
   // initializeDataLayer MUST be called synchronously before any children
@@ -55,6 +67,8 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   // useState initializer runs during the render cycle, not after it.
   const [isInitialized] = useState(() => {
     if (typeof window === "undefined") return false;
+    // Before initializeDataLayer, and before any child reads config.
+    applySetupToEnv(setup);
     try {
       // data-layer v1.2+ signature:
       // (dmUrl, lmsUrl, legacyLmsUrl, storageService, httpErrorHandler)
@@ -111,17 +125,30 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   const tenantKey = useMemo(() => resolveAppTenant(), [isInitialized]);
 
   const isSsoRoute = pathname?.startsWith("/sso-login") ?? false;
+  const isSetupRoute = pathname?.startsWith("/setup") ?? false;
 
   const LOADING = <LoadingScreen />;
 
   if (!isInitialized || !mounted) return LOADING;
 
-  // Single-platform app: no platform means misconfiguration, not "pick one".
+  // Nobody has chosen a platform yet: the setup wizard, not the app. There is
+  // no AuthProvider or TenantProvider here — both need a platform — so the
+  // wizard signs the visitor in itself, on the platform-less login URL, and
+  // picks the platform up from there. The app mounts for real on the reload
+  // after the platform is written.
+  //
+  // The wizard owns its URLs: a route under /setup renders, and each step's
+  // page decides for itself whether it still applies. Any other page asked for
+  // is sent to the step the app is on, so the address bar never claims to be
+  // somewhere this app cannot be yet.
   if (!tenantKey) {
     return (
-      <p role="alert" className="p-8 text-sm text-destructive">
-        NEXT_PUBLIC_MAIN_TENANT_KEY is not set (or is still a placeholder). Set it in .env.local.
-      </p>
+      <ReduxProvider store={iblaiStore}>
+        <Toaster />
+        <WebContainersI18nProvider messages={SDK_MESSAGES}>
+          {isSsoRoute || isSetupRoute ? children : <RedirectToSetup />}
+        </WebContainersI18nProvider>
+      </ReduxProvider>
     );
   }
 

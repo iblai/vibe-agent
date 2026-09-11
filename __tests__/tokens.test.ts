@@ -114,6 +114,13 @@ describe("mintPlatformTokens", () => {
     expect(store.get("dm_token")).toBe("dm-new");
   });
 
+  it("mints for the platform it is given — the setup wizard's, not the app's", async () => {
+    stubFetch(() => Response.json(answer));
+    const { mintPlatformTokens } = await load();
+    expect(await mintPlatformTokens("other-platform")).toBe(true);
+    expect((calls[0].init?.body as FormData).get("platform_key")).toBe("other-platform");
+  });
+
   it("sends a short token as a session key, the SDK's own rule", async () => {
     store.set("edx_jwt_token", "short-token");
     stubFetch(() => Response.json(answer));

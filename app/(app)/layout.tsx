@@ -70,7 +70,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // anywhere from here — a payment is asked for when they send
   // (components/pay-gate.tsx).
   useEffect(() => {
-    if (!isAdmin || setupSettled()) return;
+    if (!isAdmin) return;
+    // No agent means the app was never set up at all, whatever the paywall
+    // says — the wizard, not the chat.
+    if (!config.defaultAgentId()) {
+      router.replace("/setup");
+      return;
+    }
+    if (setupSettled()) return;
     void checkPaywallSetup().then((state) => {
       if (state === "undecided") router.replace("/setup");
     });
