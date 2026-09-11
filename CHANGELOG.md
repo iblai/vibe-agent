@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.2](https://github.com/iblai/vibe-agent/compare/v1.8.1...v1.8.2) (2026-09-10)
+
+### Chores
+
+* update tutorial ([6c124ec](https://github.com/iblai/vibe-agent/commit/6c124ec053500f052ccc72043c39841de4aaf08a))
+
 ## [1.8.1](https://github.com/iblai/vibe-agent/compare/v1.8.0...v1.8.1) (2026-09-10)
 
 ### Chores
