@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.0](https://github.com/iblai/vibe-agent/compare/v1.9.0...v1.10.0) (2026-09-14)
+
+### Features
+
+* drop SQLite for a JSON identity file, the DM's platform read and a minted deploy token ([b375252](https://github.com/iblai/vibe-agent/commit/b3752525282fd16556202cdd8dcc8ce86a12bbde))
+
 ## [1.9.0](https://github.com/iblai/vibe-agent/compare/v1.8.2...v1.9.0) (2026-09-11)
 
 ### Features
