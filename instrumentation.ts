@@ -4,12 +4,16 @@
 // project and leaves the answer in process.env, which every layer of a Next
 // server shares (a module variable would not — each layer gets its own copy).
 //
-// Loud on purpose: an unreachable DM, or a carried identity file that names a
-// different platform than the DM does, throws, and this instance serves
-// nothing until a healthy cold start. No retry loop — the next cold start is
-// the retry.
+// Nothing here touches the filesystem, and nothing it imports may either: Next
+// compiles this file for the edge runtime as well as for node, so a node:fs
+// anywhere in its import graph fails the build (node-module-in-edge-runtime),
+// and deferring that import to a lazy chunk only moves the problem into dev.
+// The identity file is compared against this answer where it is already read,
+// in platformKey() — see lib/onboarding.ts.
+//
+// Loud on purpose: an unreachable DM throws, and this instance serves nothing
+// until a healthy cold start. No retry loop — the next cold start is the retry.
 import config from "./lib/iblai/config";
-import { readRow } from "./lib/onboarding";
 
 export async function register(): Promise<void> {
   // Only the Node runtime needs a platform; the edge proxy sets CSP and 404s.
@@ -20,15 +24,10 @@ export async function register(): Promise<void> {
   const res = await fetch(
     `${config.dmUrl()}/api/ai-mentor/providers/vercel/hosting/projects/${encodeURIComponent(id)}/`,
   );
-  // On Vercel, but not through ibl.ai hosting: the env fallback is the way.
+  // On Vercel, but not through ibl.ai hosting — or a DM too old to answer it:
+  // the carried identity file, then env, is the way.
   if (res.status === 404) return;
   if (!res.ok) throw new Error(`platform lookup for ${id} answered ${res.status}`);
   const { platform_key: platform } = (await res.json()) as { platform_key: string };
-  const carried = readRow().platform;
-  if (carried && carried !== platform)
-    throw new Error(
-      `set up for platform "${carried}" but hosted under "${platform}": ` +
-        `publish again with a token made on ${carried}, or set up again for ${platform}`,
-    );
   process.env.IBLAI_PLATFORM_KEY = platform;
 }

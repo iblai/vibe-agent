@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -277,6 +284,23 @@ describe("POST /api/onboarding — the platform", () => {
 
     expect(res.status).toBe(500);
     expect((await res.json()).error).toContain("Could not save the platform");
+    expect(tokenMints).toEqual([]);
+  });
+
+  it("names publishing, not a raw errno, when the filesystem is read-only", async () => {
+    stubFetch();
+    const { POST } = await load();
+    // VERCEL_ENV deliberately unset: Vercel exposes it only where the project
+    // enables system environment variables, so hosted() cannot be the only
+    // signal. A directory that refuses writes is the same situation.
+    mkdirSync(join(dir, "data"), { recursive: true });
+    chmodSync(join(dir, "data"), 0o555);
+
+    const res = await POST(post({ platform: "acme" }));
+    chmodSync(join(dir, "data"), 0o755);
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain("publish it through ibl.ai hosting");
     expect(tokenMints).toEqual([]);
   });
 

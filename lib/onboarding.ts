@@ -110,11 +110,19 @@ export function writeSetup(platform: string, by: string): Setup {
  * never count. "" means nobody has answered yet: the wizard.
  */
 export function platformKey(): string {
-  return (
-    real(process.env.IBLAI_PLATFORM_KEY ?? "") ||
-    real(readRow().platform) ||
-    real(config.mainTenantKey())
-  );
+  const answered = real(process.env.IBLAI_PLATFORM_KEY ?? "");
+  const carried = real(readRow().platform);
+  // Set up for one platform, deployed under another. Checked here rather than
+  // at boot because this is where the file is already read — instrumentation.ts
+  // must not import this module, it is compiled for the edge runtime too. A
+  // wrong platform served quietly is worse than a 500: everything below keys
+  // the platform's own data.
+  if (answered && carried && answered !== carried)
+    throw new Error(
+      `set up for platform "${carried}" but hosted under "${answered}": ` +
+        `publish again with a token made on ${carried}, or set up again for ${answered}`,
+    );
+  return answered || carried || real(config.mainTenantKey());
 }
 
 /** The slug the identity file holds, or "" — see `appSlug` in lib/paywall.ts for the ladder. */

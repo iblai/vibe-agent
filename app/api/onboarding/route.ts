@@ -78,8 +78,12 @@ export async function POST(req: Request) {
       invalidateAppPaymentInfo();
     } catch (e) {
       // A published app has no file of its own; say so instead of pretending
-      // the answer was kept. Anything else names its reason.
-      const why = hosted() ? "publish it through ibl.ai hosting" : (e as Error).message;
+      // the answer was kept. Anything else names its reason. A read-only
+      // filesystem means the same thing and has to read the same way: Vercel
+      // exposes VERCEL_ENV only where the project enables system env vars, so
+      // its absence cannot be trusted to mean "local".
+      const readOnly = ["EROFS", "EACCES"].includes((e as NodeJS.ErrnoException).code ?? "");
+      const why = hosted() || readOnly ? "publish it through ibl.ai hosting" : (e as Error).message;
       return NextResponse.json({ error: `Could not save the platform: ${why}.` }, { status: 500 });
     }
     // The deploy token, so publishing asks for nothing. The key stays in

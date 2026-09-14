@@ -104,7 +104,34 @@ the mint). Never print `.env.local`, `iblai.env` or a token.
    echo "written: platform ${PLATFORM:-unset}, token ${TOKEN:0:3}…${TOKEN: -2}"
    ```
 
-   Never say the token back, not even to confirm it. Then set `package.json`
+   Never say the token back, not even to confirm it.
+
+   **Give the app its identity before zipping it.** A published app's
+   filesystem is read-only, so the platform can only be answered _before_ the
+   upload — and by this point `iblai.env` names one, whether the wizard minted
+   it or they pasted it. Without this, publishing first brings up an app with
+   no platform whose wizard cannot store one:
+
+   ```bash
+   [ -f data/onboarding.json ] || python3 - <<'PY'
+   import datetime, json, pathlib, re, uuid
+   env = pathlib.Path("iblai.env").read_text()
+   m = re.search(r"^PLATFORM=(.+)$", env, re.M)
+   key = m.group(1).strip() if m else ""
+   assert key and not key.startswith("your-"), "iblai.env has no PLATFORM: answer the wizard, or paste the platform key above"
+   pathlib.Path("data").mkdir(exist_ok=True)
+   pathlib.Path("data/onboarding.json").write_text(json.dumps({
+       "platform": key, "slug": str(uuid.uuid4()),
+       "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+       "updated_by": "publish",
+   }, indent=2) + "\n")
+   print("identity written for publishing (platform from iblai.env, new slug)")
+   PY
+   ```
+
+   It writes once and never overwrites: the slug keys this app's entry in the
+   platform's metadata and tags its Stripe product, so minting a second one
+   would orphan both. Then set `package.json`
    `name` to the name they chose (the deploy skill's slug source), run
    `/iblai-vibe-ops-deploy`, and report the URL it returns (Vercel may alter a
    long or taken name). When it is up, carry the published app's identity back

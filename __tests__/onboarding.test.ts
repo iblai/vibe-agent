@@ -88,12 +88,26 @@ describe("platformKey", () => {
     expect((await loadOnboarding()).platformKey()).toBe("from-env");
   });
 
-  it("takes the hosting's answer over both — the DM's mapping is the truth there", async () => {
+  it("takes the hosting's answer over env — the DM's mapping is the truth there", async () => {
     process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "from-env";
+    process.env.IBLAI_PLATFORM_KEY = "hosted";
+    expect((await loadOnboarding()).platformKey()).toBe("hosted");
+  });
+
+  it("accepts a carried identity that agrees with the hosting", async () => {
     const { writeSetup, platformKey } = await loadOnboarding();
     writeSetup("acme", "jane");
-    process.env.IBLAI_PLATFORM_KEY = "hosted";
-    expect(platformKey()).toBe("hosted");
+    process.env.IBLAI_PLATFORM_KEY = "acme";
+    expect(platformKey()).toBe("acme");
+  });
+
+  it("refuses to answer when the carried identity and the hosting disagree", async () => {
+    // Set up for one platform, published under another: serving the wrong
+    // platform's data quietly is worse than 500ing every request.
+    const { writeSetup, platformKey } = await loadOnboarding();
+    writeSetup("acme", "jane");
+    process.env.IBLAI_PLATFORM_KEY = "beta";
+    expect(() => platformKey()).toThrow(/set up for platform "acme" but hosted under "beta"/);
   });
 
   it("sees a write another module instance made — the server loads this file per layer", async () => {

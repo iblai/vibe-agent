@@ -7,9 +7,10 @@ import { join } from "node:path";
  * instrumentation.ts: how a hosted app learns which platform it fronts. These
  * pin: off Vercel nothing happens, the identity file is the store; on Vercel
  * the DM is asked once, by project id, and the answer lands in process.env; a
- * 404 means not ours (env is the way); a DM error fails the instance; a carried
- * identity file naming another platform fails it too, naming both; and the
- * edge runtime never asks.
+ * 404 means not ours (env is the way); a DM error fails the instance; and the
+ * edge runtime never asks. The hook reads no file: a carried identity naming
+ * another platform is caught in platformKey(), because this module is compiled
+ * for the edge runtime and may not import anything that touches node:fs.
  */
 
 const ENV_KEYS = [
@@ -93,24 +94,13 @@ describe("register", () => {
     expect(process.env.IBLAI_PLATFORM_KEY).toBeUndefined();
   });
 
-  it("fails loudly when the carried identity names another platform, naming both", async () => {
+  it("records the answer without reading the identity file, whatever it says", async () => {
+    // A carried platform that disagrees is caught in platformKey(), not here:
+    // this hook is compiled for the edge runtime too, so it must not import the
+    // module that reads the file. See onboarding.test.ts for that case.
     process.env.VERCEL_PROJECT_ID = "prj_x";
     process.env.VERCEL_ENV = "production";
     carry("beta");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => Response.json({ platform_key: "acme" })),
-    );
-    await expect((await load()).register()).rejects.toThrow(
-      /set up for platform "beta" but hosted under "acme"/,
-    );
-    expect(process.env.IBLAI_PLATFORM_KEY).toBeUndefined();
-  });
-
-  it("accepts a carried identity for the same platform", async () => {
-    process.env.VERCEL_PROJECT_ID = "prj_x";
-    process.env.VERCEL_ENV = "production";
-    carry("acme");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => Response.json({ platform_key: "acme" })),
