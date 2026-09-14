@@ -49,15 +49,15 @@ export function currentSetupStep(a: Answered): SetupStep {
 }
 
 /**
- * Whether {step} still applies. Only `start` expires, at sign-in. The platform
- * step is "choose or change" — `currentSetupStep` stops sending anyone there
- * once one is stored, and the quiet link on the price step is the way back. The
- * rest stay reachable (the agent, the name and the price are all editable after
- * setup) but need a platform to ask anything about.
+ * Whether {step} still applies. Two expire: `start` at sign-in, and `platform`
+ * once one is stored — the platform is answered once and never changed, so a
+ * stale link sends the visitor on. The rest stay reachable (the agent, the
+ * name and the price are all editable after setup) but need a platform to ask
+ * anything about.
  */
 export function stepApplies(step: SetupStep, a: Answered): boolean {
   if (step === "start") return !a.signedIn;
-  if (step === "platform") return true;
+  if (step === "platform") return !a.platform;
   return !!a.platform;
 }
 

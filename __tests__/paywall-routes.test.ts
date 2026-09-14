@@ -174,7 +174,7 @@ const stripeDm =
   };
 
 /**
- * A working directory with no data/onboarding.db in it. These suites pin the
+ * A working directory with no data/onboarding.json in it. These suites pin the
  * env ladder, and the stored platform beats env by design — without this they
  * read the developer's own database and fail once this app has been set up
  * locally.
@@ -234,15 +234,13 @@ describe("POST /api/paywall/admin/setup", () => {
     expect(metaWrites).toHaveLength(0);
   });
 
-  it("500s loudly when NEXT_PUBLIC_PAYWALL_APP_SLUG is blanked — the slug defaults in code, so only an explicit empty value is a misconfiguration", async () => {
+  it("treats a blank NEXT_PUBLIC_PAYWALL_APP_SLUG as unset: the slug ladder ends in a code default", async () => {
     process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "";
     stubFetch();
     const { POST } = await loadSetup();
     const res = await POST(post({ access: "free" }));
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "NEXT_PUBLIC_PAYWALL_APP_SLUG not set" });
-    expect(configWrites).toHaveLength(0);
-    expect(metaWrites).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(Object.keys(metaWrites[0].body.metadata.apps)).toEqual(["vibe-agent"]);
   });
 
   it("free: opens self-join and records the choice without any Stripe or connect call, even after a paid plan", async () => {
@@ -579,14 +577,11 @@ describe("/api/paywall/admin/connect", () => {
     expect(connectCalls).toHaveLength(0);
   });
 
-  it("500s loudly when NEXT_PUBLIC_PAYWALL_APP_SLUG is blanked", async () => {
+  it("works with a blank NEXT_PUBLIC_PAYWALL_APP_SLUG: blank means unset", async () => {
     process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "";
     stubFetch();
     const { GET } = await loadConnect();
-    const res = await GET(request("GET"));
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toContain("NEXT_PUBLIC_PAYWALL_APP_SLUG");
-    expect(connectCalls).toHaveLength(0);
+    expect((await GET(request("GET"))).status).toBe(200);
   });
 
   it("GET relays the platform's status with the admin's own token on their own path", async () => {

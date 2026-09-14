@@ -42,10 +42,9 @@ describe("stepApplies", () => {
     expect(stepApplies("start", signedIn)).toBe(false);
   });
 
-  it("keeps the platform step open once one is stored: that visit is a change", () => {
+  it("expires the platform step once one is stored: the platform is answered once", () => {
     expect(stepApplies("platform", signedIn)).toBe(true);
-    expect(stepApplies("platform", withPlatform)).toBe(true);
-    // Nobody is sent there by the ladder, though — the quiet link is the way in.
+    expect(stepApplies("platform", withPlatform)).toBe(false);
     expect(currentSetupStep(withPlatform)).not.toBe("platform");
   });
 

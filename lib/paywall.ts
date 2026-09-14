@@ -10,14 +10,19 @@ import config from "./iblai/config";
 import { platformKey, storedSlug } from "./onboarding";
 
 /**
- * What this app is called on the platform: the slug the setup wizard minted from
- * the app's name, else the NEXT_PUBLIC_PAYWALL_APP_SLUG override, else the
- * shared default every install used before slugs were minted.
+ * What this app is called on the platform: the key under `apps.<slug>` in the
+ * platform's public metadata and the Stripe product's `metadata.app` tag. An
+ * explicit NEXT_PUBLIC_PAYWALL_APP_SLUG names it; else the slug the setup
+ * wizard minted with the platform (the identity file, carried to the hosting
+ * read-only); else, for an app published before it was set up, its Vercel
+ * project id — permanent, and the same on every deploy; else the shared
+ * default every install used before slugs were minted.
  *
- * A function, not a constant: it is answered during setup now, so reading it
- * once at import would freeze whatever was true when the server booted.
+ * A function, not a constant: it is answered during setup, so reading it once
+ * at import would freeze whatever was true when the server booted.
  */
-export const appSlug = (): string => storedSlug() || config.paywallAppSlug();
+export const appSlug = (): string =>
+  config.paywallAppSlug() || storedSlug() || process.env.VERCEL_PROJECT_ID || "vibe-agent";
 
 export type PaywallUser = { userId: number; username: string; email: string };
 
@@ -295,47 +300,6 @@ export async function writeAppConfig(
       method: "PUT",
       headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ metadata: { apps: { [appSlug()]: patch } } }),
-      cache: "no-store",
-    }),
-  );
-  invalidateAppPaymentInfo();
-}
-
-/**
- * Take this app's data off {platform} — the one it is leaving, so the caller's
- * token has to be that platform's own (the DM refuses a token minted elsewhere).
- * Its entry goes, and the price this app appended to the sign-in copy comes back
- * off, leaving whatever the platform itself said.
- *
- * `null` is how a key is deleted here: the DM's metadata write recurses into
- * dict values and replaces anything else, and it has no DELETE — so a key can be
- * emptied but never removed. Every reader treats null as nothing
- * (`isPaymentInfo` rejects it, `raw?.agent` is undefined), which is what lets the
- * wizard reopen unanswered on the new platform.
- *
- * The slug is the same on both platforms: it is what names the entry here, which
- * is exactly why the wizard keeps it across a move.
- *
- * Left alone on purpose: the Stripe product and price (nothing references them
- * once the entry is gone — the same state a paid → free switch leaves), the
- * self-join switch (this app opened it, but the platform may now depend on it),
- * and the platform's own title and heading.
- */
-export async function releaseApp(token: string, platform: string): Promise<void> {
-  const body = await dmJson(await fetch(metadataUrl(platform), { cache: "no-store" }));
-  const branding = body?.metadata?.[LOGIN_BRANDING_KEY];
-  await dmJson(
-    await fetch(metadataUrl(platform), {
-      method: "PUT",
-      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        metadata: {
-          apps: { [appSlug()]: null },
-          [LOGIN_BRANDING_KEY]: {
-            display_description_info: descriptionWithoutPrice(branding?.display_description_info),
-          },
-        },
-      }),
       cache: "no-store",
     }),
   );

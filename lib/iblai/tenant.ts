@@ -73,3 +73,23 @@ export function readTenants(): TenantEntry[] {
 export function isTenantAdmin(): boolean {
   return !!readTenants().find((t) => t.key === resolveAppTenant())?.is_admin;
 }
+
+/** One row of the SDK's platform list (`useGetUserTenantsQuery`), narrowed to what the wizard shows. */
+export type PlatformRow = {
+  key?: string;
+  name?: string;
+  platform_name?: string;
+  is_admin?: boolean;
+};
+
+/**
+ * The platforms the signed-in person administers, from the SDK's list: the only
+ * ones the setup wizard ever offers. Membership alone is not enough — the
+ * wizard configures the platform — and ibl.ai's shared `main` is never it.
+ * The server still proves the choice (`openSelfJoinWith` in lib/paywall.ts);
+ * this only keeps the list honest.
+ */
+export const adminPlatforms = (rows: unknown): { key: string; name: string }[] =>
+  ((Array.isArray(rows) ? rows : []) as PlatformRow[])
+    .filter((row) => !!row?.is_admin && isRealPlatform(row.key ?? ""))
+    .map((row) => ({ key: row.key ?? "", name: row.name ?? row.platform_name ?? row.key ?? "" }));

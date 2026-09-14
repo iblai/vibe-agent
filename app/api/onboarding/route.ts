@@ -2,8 +2,8 @@
 //
 // GET answers what the app is configured as, so the browser can tell when a
 // write has landed. POST takes one or more of {platform, agent, name} with the
-// caller's own DM token: the platform goes to the local database, the agent and
-// the name to the platform's metadata.
+// caller's own DM token: the platform goes to the identity file, once, and the
+// agent and the name to the platform's metadata.
 //
 // There is no admin check here. `openSelfJoinWith` is admin-only on the
 // platform and answers 403 to anyone else, so a 2xx from it IS the proof —
@@ -20,12 +20,11 @@ import { adminCaller, failure, isResponse, jsonBody } from "../../../lib/paywall
 import {
   invalidateAppPaymentInfo,
   openSelfJoinWith,
-  readAppPaymentInfo,
-  releaseApp,
   resolveSetup,
   writeAppConfig,
 } from "../../../lib/paywall";
-import { makeSlug, platformKey, storedSlug, writeSetup } from "../../../lib/onboarding";
+import { hosted, platformKey, writeSetup } from "../../../lib/onboarding";
+import { mintDeployToken, type DeployToken } from "../../../lib/deploy-token";
 import { isRealPlatform } from "../../../lib/iblai/tenant";
 
 /** A trimmed string field, or "" when absent. Length-capped: this ends up in public metadata. */
@@ -46,9 +45,13 @@ export async function POST(req: Request) {
   const name = field(body, "name");
   const stored = platformKey();
 
-  // A platform in the body always wins: this is both the first answer and the
-  // move to another one. The browser releases the old platform's copy itself,
-  // with that platform's own token — this one's is no good there.
+  // The platform is answered once. Sending the stored one again is a no-op;
+  // any other is refused before the platform is even asked.
+  if (platform && stored && platform !== stored)
+    return NextResponse.json(
+      { error: "This app’s platform is set and cannot be changed." },
+      { status: 409 },
+    );
   const target = platform || stored;
   if (!target) return NextResponse.json({ error: "Choose a platform first" }, { status: 400 });
   if (!isRealPlatform(target))
@@ -65,66 +68,32 @@ export async function POST(req: Request) {
     return failure(e);
   }
 
-  if (platform && platform !== stored) {
+  let deployToken: DeployToken | undefined;
+  if (platform && !stored) {
+    let slug: string;
     try {
-      writeSetup({ platform: target }, caller.username);
-      // The metadata cache is not keyed by platform, so the old platform's read
-      // would answer for this one for up to a minute.
+      ({ slug } = writeSetup(target, caller.username));
+      // The metadata cache is not keyed by platform: a read made before the
+      // answer would stand for this platform for up to a minute.
       invalidateAppPaymentInfo();
-    } catch {
-      // A deployed app's filesystem is read-only. Say so instead of pretending
-      // the answer was kept.
-      return NextResponse.json(
-        {
-          error: "This deployment cannot change its platform: set it up locally and publish again.",
-        },
-        { status: 500 },
-      );
+    } catch (e) {
+      // A published app has no file of its own; say so instead of pretending
+      // the answer was kept. Anything else names its reason.
+      const why = hosted() ? "publish it through ibl.ai hosting" : (e as Error).message;
+      return NextResponse.json({ error: `Could not save the platform: ${why}.` }, { status: 500 });
     }
+    // The deploy token, so publishing asks for nothing. The key stays in
+    // iblai.env: only how it went comes back.
+    deployToken = await mintDeployToken(caller.token, target, slug, caller.username);
   }
 
   if (agent || name) {
     try {
-      // The app's own slug, minted from its name the first time it is set up and
-      // never again: it keys apps.<slug> in the platform's metadata and tags the
-      // Stripe product, so changing it later would orphan both. An app that was
-      // set up before slugs were minted has none stored and keeps the shared
-      // default, which is where its entry already is. The read is uncached: a
-      // stale empty answer here would mint a slug for such an app and orphan
-      // both its metadata entry and its Stripe product.
-      if (name && !storedSlug() && !(await readAppPaymentInfo(true)).agent) {
-        writeSetup({ slug: makeSlug(name) }, caller.username);
-      }
       await writeAppConfig(caller.token, { ...(agent && { agent }), ...(name && { name }) });
     } catch (e) {
       return failure(e);
     }
   }
 
-  return NextResponse.json(await resolveSetup());
-}
-
-/**
- * Take this app's data off the platform named in `?platform=` — the one it has
- * just left. The caller's token must be that platform's own, which is why the
- * browser keeps it before minting the new one: the DM refuses a token minted
- * elsewhere, and that refusal is also the admin check, so there is none here.
- *
- * Not the stored platform, on purpose: by the time this runs the app is already
- * on the new one.
- */
-export async function DELETE(req: Request) {
-  const caller = await adminCaller(req);
-  if (isResponse(caller)) return caller;
-
-  const platform = new URL(req.url).searchParams.get("platform")?.trim() ?? "";
-  if (!platform)
-    return NextResponse.json({ error: "Name the platform to release" }, { status: 400 });
-
-  try {
-    await releaseApp(caller.token, platform);
-  } catch (e) {
-    return failure(e);
-  }
-  return NextResponse.json({ released: platform });
+  return NextResponse.json({ ...(await resolveSetup()), ...(deployToken && { deployToken }) });
 }

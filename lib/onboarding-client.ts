@@ -11,6 +11,7 @@ import config from "./iblai/config";
 import { authLoginUrl } from "./iblai/auth-utils";
 import { paywallFetch, readUsername } from "./paywall-client";
 import type { AppSetup } from "./paywall";
+import type { DeployToken } from "./deploy-token";
 
 export type AgentOption = { id: string; name: string; description: string };
 
@@ -105,21 +106,15 @@ export async function createAgent(
   return { id: agent.unique_id, name: agent.name ?? name, description: purpose };
 }
 
-/** Record an answer. The route proves the caller is the platform's admin. */
-export const saveSetup = (patch: { platform?: string; agent?: string; name?: string }) =>
-  paywallFetch<AppSetup>("/api/onboarding", { method: "POST", json: patch });
-
 /**
- * Take this app's data off the platform it has just left. {token} is that
- * platform's own `dm_token`, kept before the new one was minted: a token is
- * minted for one platform and the DM refuses it anywhere else, so the current
- * one cannot do this. Run after the move, never before — a failure then leaves
- * the app correctly moved, with the old platform's copy still there to say so.
+ * Record an answer. The route proves the caller is the platform's admin. A
+ * platform answer also says how the deploy token went (lib/deploy-token.ts);
+ * the token itself never comes back.
  */
-export const releaseApp = (platform: string, token: string) =>
-  paywallFetch<{ released: string }>(`/api/onboarding?platform=${encodeURIComponent(platform)}`, {
-    method: "DELETE",
-    headers: { Authorization: `Token ${token}` },
+export const saveSetup = (patch: { platform?: string; agent?: string; name?: string }) =>
+  paywallFetch<AppSetup & { deployToken?: DeployToken }>("/api/onboarding", {
+    method: "POST",
+    json: patch,
   });
 
 /**

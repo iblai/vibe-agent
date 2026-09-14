@@ -3,9 +3,10 @@
  *
  * Hosted-iblai.app defaults live in code: with no env vars at all, every
  * service routes through https://api.iblai.app. `.env.local` (copied from
- * `.env.example`) holds the platform key, the agent, the app's name and any
- * self-hosted overrides. Nothing in it is a secret: the app holds no platform
- * key of its own.
+ * `.env.example`) is optional: self-hosted overrides, and the old way of
+ * pinning the platform, the agent and the app's name — the setup wizard's own
+ * answers (data/onboarding.json, the platform's metadata) win over it. Nothing
+ * in it is a secret: the app holds no platform key of its own.
  *
  * Supports two modes:
  *   1. Consolidated API (default on hosted iblai.app): NEXT_PUBLIC_API_BASE_URL
@@ -96,9 +97,9 @@ const config = {
   wsUrl: () => getEnv("NEXT_PUBLIC_BASE_WS_URL", `wss://asgi.data.${domain()}`),
 
   mainTenantKey: () => getEnv("NEXT_PUBLIC_MAIN_TENANT_KEY", ""),
-  // Defaulted in code for the same reason as the slug: .env.example used to
-  // ship this value, and nothing writes an env file any more. Mobile Tauri
-  // returns from SSO on this scheme; desktop and web ignore it.
+  // Defaulted in code: .env.example used to ship this value, and nothing
+  // writes an env file. Mobile Tauri returns from SSO on this scheme; desktop
+  // and web ignore it.
   tauriCustomScheme: () => getEnv("NEXT_PUBLIC_TAURI_CUSTOM_SCHEME", "vibe-agent"),
 
   // The one agent this app fronts: the last path segment of an
@@ -111,17 +112,12 @@ const config = {
   // platform's own name is never used for it.
   appName: () => getEnv("NEXT_PUBLIC_APP_NAME", ""),
   platformBaseDomain: () => domain(),
-  // What this app is called on the platform: the Stripe product's
-  // `metadata.app` tag (the platform's checkout rule) and the key under
-  // `apps.<slug>` in the platform's public metadata, where the paywall choice
-  // is recorded. The browser and the admin routes read the same value.
-  // The fallback only. The setup wizard mints this app its own slug from its
-  // name and stores it (lib/onboarding.ts, `appSlug()` in lib/paywall.ts); this
-  // is what an app set up before that keeps using, and what a brand-new one uses
-  // for the moment between choosing a platform and naming itself. Defaulted in
-  // code because a working app never needs an env file, and an empty slug would
-  // key the platform's metadata as apps[""] and refuse every admin route.
-  paywallAppSlug: () => getEnv("NEXT_PUBLIC_PAYWALL_APP_SLUG", "vibe-agent"),
+  // An explicit slug for this app on the platform, or "": the first rung of
+  // `appSlug()` in lib/paywall.ts, which then tries the identity file the setup
+  // wizard wrote, the Vercel project id, and last the shared default every
+  // install used before slugs were minted. The browser reads the resolved
+  // value through window.__ENV__.
+  paywallAppSlug: () => getEnv("NEXT_PUBLIC_PAYWALL_APP_SLUG", ""),
 };
 
 export default config;

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import config from "@/lib/iblai/config";
 import { saveReturnPath } from "@/lib/iblai/auth-utils";
-import { isRealPlatform, resolveAppTenant } from "@/lib/iblai/tenant";
+import { adminPlatforms, resolveAppTenant } from "@/lib/iblai/tenant";
 import { mintPlatformTokens } from "@/lib/iblai/tokens";
 import { setupPath, stepProgress, type SetupStep } from "@/lib/setup-steps";
 import { useStepGuard } from "@/components/setup/step-guard";
@@ -24,13 +24,11 @@ import {
   createAgent,
   createPlatformUrl,
   listAgents,
-  releaseApp,
   saveSetup,
   type AgentOption,
 } from "@/lib/onboarding-client";
 import {
   PaywallRequestError,
-  dmToken,
   errorMessage,
   fetchCatalogue,
   invalidateCatalogue,
@@ -46,9 +44,6 @@ const OPTIONS: { value: Access; title: string; detail: string }[] = [
   { value: "monthly", title: "Monthly fee", detail: "A subscription, cancelled any time." },
 ];
 
-/** The SDK's platform list, narrowed to what this screen shows. */
-type PlatformRow = { key?: string; name?: string; platform_name?: string; is_admin?: boolean };
-
 /** A card that reads as a radio, the shape both new steps and the question use. */
 const cardClass = (selected: boolean) =>
   cn(
@@ -61,6 +56,8 @@ const cardClass = (selected: boolean) =>
 const CONNECT_ROUTE = "/api/paywall/admin/connect";
 /** The answer in progress survives the round trip to Stripe here; cleared after the save. */
 const PENDING_KEY = "paywall_setup_pending";
+/** One line the step after the platform save shows once, when the deploy token could not be minted. */
+const NOTE_KEY = "setup_note";
 
 type Pending = { access: Access; amount: string };
 
@@ -70,6 +67,14 @@ function readReturn(): { result: string; reason: string } | null {
   const params = new URLSearchParams(window.location.search);
   const result = params.get("stripe_connect");
   return result ? { result, reason: params.get("reason") ?? "" } : null;
+}
+
+/** The note left by the last save, taken off the shelf as it is read. */
+function readNote(): string {
+  if (typeof window === "undefined") return "";
+  const note = sessionStorage.getItem(NOTE_KEY) ?? "";
+  sessionStorage.removeItem(NOTE_KEY);
+  return note;
 }
 
 function readPending(): Pending | null {
@@ -133,15 +138,15 @@ export function SetupScreen({ step }: { step: SetupStep }) {
   /** The overlay's message while the page is busy; "" when it is not. */
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [note] = useState(readNote);
 
   // The platform step: the SDK's own list of the platforms this account belongs
   // to. `tenants` in localStorage is not it — the login SPA's payload carries
-  // none, so it has to be fetched. Fetched with one already stored too: that
-  // visit is a change of platform.
+  // none, so it has to be fetched.
   const { data: tenants, isLoading: tenantsLoading } = useGetUserTenantsQuery(undefined, {
     skip: step !== "platform",
   });
-  const [chosenPlatform, setChosenPlatform] = useState(platform);
+  const [chosenPlatform, setChosenPlatform] = useState("");
 
   // The agent step: the agent, the search behind it, and the app's name.
   const [agents, setAgents] = useState<AgentOption[] | null>(null);
@@ -157,10 +162,8 @@ export function SetupScreen({ step }: { step: SetupStep }) {
 
   const loadStatus = () => paywallFetch<ConnectStatus>(CONNECT_ROUTE).then(setStatus);
 
-  /** The platforms this account administers. `main` is ibl.ai's shared one and never the answer. */
-  const ownPlatforms = ((tenants ?? []) as PlatformRow[])
-    .filter((row) => !!row?.is_admin && isRealPlatform(row.key ?? ""))
-    .map((row) => ({ key: row.key ?? "", name: row.name ?? row.platform_name ?? row.key ?? "" }));
+  /** The platforms this account administers — the only ones on offer. */
+  const ownPlatforms = adminPlatforms(tenants);
 
   const save = async (chosen: Access, price: string) => {
     const paid = chosen !== "free";
@@ -265,11 +268,6 @@ export function SetupScreen({ step }: { step: SetupStep }) {
       });
   }, [step, platform, agentId, currentAgent]);
 
-  /** Picking a platform other than the stored one is a move, not an answer. */
-  const movingPlatform = !!platform && !!chosenPlatform && chosenPlatform !== platform;
-  const platformName = (key: string) =>
-    ownPlatforms.find((option) => option.key === key)?.name || key;
-
   /** The list the agent step shows: the page of results, with the configured agent kept in view. */
   const agentRows =
     agents && currentAgent && !agents.some((option) => option.id === currentAgent.id)
@@ -313,47 +311,32 @@ export function SetupScreen({ step }: { step: SetupStep }) {
   };
 
   /**
-   * Record the platform and move on. A change also releases the one being left —
-   * with that platform's own token, read before the new one is minted, because a
-   * token is minted for one platform and refused on any other path.
-   *
-   * The move goes first on purpose: if it fails (a deployed app's filesystem is
-   * read-only, and the route says so) nothing has been destroyed. A release that
-   * fails afterwards leaves the app correctly moved and the old platform's copy
-   * intact, which is said rather than swallowed.
+   * Record the platform and move on. Once: the platform is never changed, and
+   * the route answers 409 to a second one. The save also mints the deploy token
+   * (lib/deploy-token.ts); when the DM will not, the next step says so once,
+   * and publishing asks for a token instead.
    */
   const choosePlatform = async (chosen: string) => {
-    const leaving = platform && platform !== chosen ? platform : "";
-    const leavingToken = leaving ? dmToken() : "";
-    setBusy(leaving ? "Moving the app…" : "Saving…");
+    setBusy("Saving…");
     setError("");
     try {
       // This platform's own token pair first: the route's call is refused with
       // a token minted for a different platform.
       await mintPlatformTokens(chosen);
-      await saveSetup({ platform: chosen });
+      const saved = await saveSetup({ platform: chosen });
+      if (saved.deployToken === "missing")
+        sessionStorage.setItem(NOTE_KEY, "Publishing will ask for a Platform API Token.");
     } catch (e) {
       setError(setupMessage(e));
       setBusy("");
       return;
-    }
-    if (leaving) {
-      try {
-        await releaseApp(leaving, leavingToken);
-      } catch (e) {
-        setError(
-          `Moved to ${chosen}, but ${leaving} still has this app’s setup: ${errorMessage(e)}`,
-        );
-        setBusy("");
-        return;
-      }
     }
     restart();
   };
 
   const onPlatformSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!chosenPlatform || chosenPlatform === platform) return;
+    if (!chosenPlatform) return;
     await choosePlatform(chosenPlatform);
   };
 
@@ -483,10 +466,8 @@ export function SetupScreen({ step }: { step: SetupStep }) {
       {step === "platform" && (
         <form onSubmit={onPlatformSubmit}>
           <StepHeader
-            title={
-              platform ? "Which platform should this app be on?" : "Which platform is this app for?"
-            }
-            subtitle="Your space on ibl.ai: its agents, its people, its sign-in page."
+            title="Which platform is this app for?"
+            subtitle="Your space on ibl.ai: its agents, its people, its sign-in page. Answered once."
           />
           {tenantsLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {!tenantsLoading && ownPlatforms.length === 0 && (
@@ -520,33 +501,20 @@ export function SetupScreen({ step }: { step: SetupStep }) {
                     onChange={() => setChosenPlatform(option.key)}
                     className="sr-only"
                   />
-                  <span className="text-sm font-medium text-gray-900">
-                    {option.name}
-                    {option.key === platform && (
-                      <span className="ml-2 text-xs font-normal text-gray-500">current</span>
-                    )}
-                  </span>
+                  <span className="text-sm font-medium text-gray-900">{option.name}</span>
                   <span className="text-sm text-gray-500">{option.key}</span>
                 </label>
               ))}
             </fieldset>
           )}
-          {/* Moving is destructive and irreversible: say what goes, on the row
-              itself, and let the button say what it does. */}
-          {movingPlatform && (
-            <p className="mt-4 text-sm text-gray-500">
-              Moving to {platformName(chosenPlatform)} clears this app’s agent, name and price on{" "}
-              {platformName(platform)}. You will answer them again.
-            </p>
-          )}
           {errorLine}
           {ownPlatforms.length > 0 && (
             <button
               type="submit"
-              disabled={!chosenPlatform || chosenPlatform === platform || !!busy}
+              disabled={!chosenPlatform || !!busy}
               className={`mt-6 ${onboardingPrimaryButtonClass}`}
             >
-              {movingPlatform ? "Change platform" : "Continue"}
+              Continue
             </button>
           )}
         </form>
@@ -557,6 +525,7 @@ export function SetupScreen({ step }: { step: SetupStep }) {
             title="Which agent does this app front?"
             subtitle="One app, one agent. The name is what people see; you can change both here whenever you like."
           />
+          {note && <p className="mb-4 text-xs text-muted-foreground">{note}</p>}
           {!agentRows && <p className="text-sm text-muted-foreground">Loading…</p>}
           {agentRows && !makingAgent && (
             <div className="space-y-3">
@@ -750,17 +719,6 @@ export function SetupScreen({ step }: { step: SetupStep }) {
                 }}
               >
                 Change the agent or the app’s name
-              </button>
-              {" · "}
-              <button
-                type="button"
-                className="underline-offset-4 hover:underline"
-                onClick={() => {
-                  setError("");
-                  router.push(setupPath("platform"));
-                }}
-              >
-                Change the platform
               </button>
             </p>
           )}

@@ -92,7 +92,7 @@ By hand:
    pnpm dev
    ```
 
-   Open http://localhost:3000 and press **Start**. The app asks for the platform, the agent, the app's name and the access question, and keeps the answers itself — the platform in `data/onboarding.db`, a small SQLite database it owns, and the agent and the name in the platform's own metadata, so a deployed app can still change those. Naming the app also mints it a slug of its own — `<name>_<uuid>` — which is how two apps on one platform keep their settings apart; it is minted once and survives a rename. **There is no env file to create**: every key has a default in `lib/iblai/config.ts`, and `.env.example` is a list of knobs (self-hosting URLs, the About flag) rather than a setup step. `TOKEN` never goes near the app: it holds no platform key.
+   Open http://localhost:3000 and press **Start**. The app asks for the platform, the agent, the app's name and the access question, and keeps the answers itself — the platform, and a slug it mints with it (a uuid: how two apps on one platform keep their settings apart), in `data/onboarding.json`, its identity; the agent and the name in the platform's own metadata, so a published app can still change those. The platform is answered once, for good. The same save mints the Platform API Token that publishing needs, into `iblai.env`, so nothing is asked twice. **There is no env file to create**: every key has a default in `lib/iblai/config.ts`, and `.env.example` is a list of knobs (self-hosting URLs, the About flag) rather than a setup step. `TOKEN` never goes near the app: it holds no platform key.
 
    Every origin the app runs on (localhost and the deployed one) must be in the platform's allowed redirect origins, or sign-in never comes back.
 
@@ -170,7 +170,7 @@ A price made this way is sold only once it is the recorded one (`apps.vibe-agent
 
 ## Deployment
 
-`/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`, which this app does not have, so that file carries nothing — the platform rides in `data/onboarding.db` (the zip excludes by its own list, not `.gitignore`, and `outputFileTracingIncludes` puts the file in the function bundle), and the agent, the name and the paywall choice are in the platform's metadata. There is no token to carry: the app holds none. Server mode is required: never set `output: 'export'`. Afterwards:
+`/iblai-vibe-ops-deploy` (from `iblai/vibe`) zips the source, uploads it to ibl.ai hosting with the platform token, polls until ready and returns the live URL. It regenerates `.env.production` from `.env.local`, which this app does not have, so that file carries nothing — the identity rides in `data/onboarding.json` (the zip excludes by its own list, not `.gitignore`, and `outputFileTracingIncludes` puts the file in the function bundle; the published app keys the same `apps.<slug>`), the agent, the name and the paywall choice are in the platform's metadata, and the platform itself is what ibl.ai hosting recorded for the Vercel project: at boot the app asks the DM by `VERCEL_PROJECT_ID` (`instrumentation.ts`) and refuses to serve if that answer and the carried identity disagree. `iblai.env`, with the deploy token the wizard minted, never rides: the skill excludes it and the DM strips it. An app published before it was set up opens the wizard at the agent question on its own URL, keyed by its project id. Server mode is required: never set `output: 'export'`. Afterwards:
 
 - add the deployed origin to the platform's allowed redirect origins;
 - put it in `src-tauri/tauri.conf.json` → `build.frontendDist` (see below).
@@ -247,7 +247,7 @@ app/
 ├── setup/                              # The setup wizard (outside the shell, no navbar)
 ├── sso-login-complete/                 # SSO landing
 └── api/
-    ├── onboarding/                     # What the setup wizard writes: the platform to data/onboarding.db, the agent and name to platform metadata
+    ├── onboarding/                     # What the setup wizard writes: the platform (once) to data/onboarding.json and the deploy token to iblai.env, the agent and name to platform metadata
     └── paywall/admin/
         ├── setup/                      # Admin rail — forwards the admin's own platform token
         └── connect/                    # Connect with Stripe relay — same token; GET status, POST start, DELETE
@@ -258,7 +258,8 @@ components/
 ├── loading-screen.tsx                  # The one loading / busy screen (OS look)
 └── pay-gate.tsx  pay-modal.tsx         # The send gate around <Chat>, and the pay modal it opens (Stripe's embedded checkout)
 lib/
-├── onboarding.ts                       # Server-only: the platform key in data/onboarding.db (the one answer metadata cannot hold)
+├── onboarding.ts                       # Server-only: the identity file, data/onboarding.json (the platform and its slug — what metadata cannot hold)
+├── deploy-token.ts                     # Server-only: mints the deploy token at the platform save, into iblai.env
 ├── onboarding-client.ts                # Browser side of the wizard: agents, the runtime env, ibl.ai's sign-up return
 ├── paywall.ts  paywall-admin.ts        # Server-only: the admin routes' plumbing, platform-metadata store, resolveSetup
 ├── paywall-client.ts                   # Browser side: the buyer rail straight to the platform (catalogue, checkout, access), setup and access checks
@@ -267,6 +268,7 @@ lib/
 providers/iblai-providers.tsx           # initializeDataLayer + AuthProvider + TenantProvider + i18n
 store/iblai-store.ts                    # Redux store (slice keys fixed by the SDK)
 proxy.ts                                # CSP and the 404 for /about when the flag is off
+instrumentation.ts                      # On the hosting: asks the DM which platform owns this Vercel project, once per server instance
 src-tauri/                              # Thin WebView shell for desktop and mobile
 .github/workflows/                      # release.yml (release-it on every push to main), tauri-build-desktop.yml (desktop bundles on demand)
 .husky/commit-msg                       # commitlint

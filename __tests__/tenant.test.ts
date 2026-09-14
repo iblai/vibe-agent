@@ -97,3 +97,24 @@ describe("readTenants", () => {
     expect(readTenants()).toEqual([{ key: "main" }, { key: "acme" }]);
   });
 });
+
+describe("adminPlatforms", () => {
+  it("offers only the platforms the person administers, never main, whatever shape the SDK answers", async () => {
+    const { adminPlatforms } = await loadTenant();
+    expect(
+      adminPlatforms([
+        { key: "acme", name: "Acme", is_admin: true },
+        { key: "beta", platform_name: "Beta", is_admin: true },
+        { key: "gamma", name: "Gamma", is_admin: false },
+        { key: "main", name: "ibl.ai", is_admin: true },
+        { key: "delta", is_admin: true },
+        null,
+      ]),
+    ).toEqual([
+      { key: "acme", name: "Acme" },
+      { key: "beta", name: "Beta" },
+      { key: "delta", name: "delta" },
+    ]);
+    expect(adminPlatforms(undefined)).toEqual([]);
+  });
+});

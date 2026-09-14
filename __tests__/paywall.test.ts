@@ -27,7 +27,7 @@ const saved: Record<string, string | undefined> = {};
 const loadPaywall = async () => await import("../lib/paywall");
 
 /**
- * A working directory with no data/onboarding.db in it. These suites pin the
+ * A working directory with no data/onboarding.json in it. These suites pin the
  * env ladder, and the stored platform beats env by design — without this they
  * read the developer's own database and fail once this app has been set up
  * locally.

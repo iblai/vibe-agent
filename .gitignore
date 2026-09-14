@@ -13,8 +13,9 @@
 # testing
 /coverage
 
-# the setup wizard's answer for THIS checkout; it still rides the deploy zip,
-# which excludes by its own list rather than by this file
+# this checkout's identity (the platform and the app's slug); it rides the
+# deploy zip read-only — the zip excludes by its own list, not this file — and
+# is never written on the hosting
 /data
 
 # next.js

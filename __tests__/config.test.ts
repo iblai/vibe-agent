@@ -85,8 +85,8 @@ describe("hosted defaults in code", () => {
 });
 
 describe("paywallAppSlug", () => {
-  it("defaults in code when unset — a fresh clone has no env file at all", async () => {
-    expect((await loadConfig()).paywallAppSlug()).toBe("vibe-agent");
+  it("is the explicit slug or nothing — the ladder in lib/paywall.ts supplies the rest", async () => {
+    expect((await loadConfig()).paywallAppSlug()).toBe("");
     process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG = "demo-app";
     vi.resetModules();
     expect((await loadConfig()).paywallAppSlug()).toBe("demo-app");

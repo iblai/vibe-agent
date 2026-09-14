@@ -1,18 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Where the setup wizard's answers live. These tests pin: the platform comes
- * from the app's own database first and env second, so a published app and a
- * self-hoster both keep working; placeholders and ibl.ai's shared `main` never
- * count as an answer; a write is visible to the very next read; a filesystem
- * that cannot be written says so; and the agent and the name come off the
- * platform's metadata over env, with a failed public read falling back to env
- * instead of blanking a working app. The metadata write names only its own two
- * keys, so the paywall choice beside it survives the deep merge.
+ * Where the app's identity lives. These tests pin: the platform comes from the
+ * hosting's answer first, the identity file second and env last, so a hosted
+ * app, a local one and a self-hoster all keep working; the slug is minted with
+ * the platform, once, and an explicit env slug beats it while a Vercel project
+ * id is only the fallback; placeholders and ibl.ai's shared `main` never count;
+ * a write is visible to the very next read, from any module instance; a
+ * filesystem that cannot be written says so; nothing is ever written on the
+ * hosting, where a carried file is read and a broken one throws; and the agent
+ * and the name come off the platform's metadata over env, with a failed public
+ * read falling back to env instead of blanking a working app. The metadata
+ * write names only its own two keys, so the paywall choice beside it survives
+ * the deep merge.
  *
  * process.cwd() is redirected at every turn: without it these would read the
  * developer's own data/ and pass or fail by accident.
@@ -24,6 +27,9 @@ const ENV_KEYS = [
   "NEXT_PUBLIC_DEFAULT_AGENT_ID",
   "NEXT_PUBLIC_APP_NAME",
   "NEXT_PUBLIC_PAYWALL_APP_SLUG",
+  "IBLAI_PLATFORM_KEY",
+  "VERCEL_PROJECT_ID",
+  "VERCEL_ENV",
 ] as const;
 
 const saved: Record<string, string | undefined> = {};
@@ -36,18 +42,13 @@ const loadPaywall = async () => await import("../lib/paywall");
 const metadataResponse = (app: Record<string, unknown>) =>
   Response.json({ platform_name: "Acme", metadata: { apps: { "demo-app": app } } });
 
-/** Read the row back the way anything else would, not through the module under test. */
-const storedPlatform = (): string | null => {
-  const db = new DatabaseSync(join(dir, "data", "onboarding.db"), { readOnly: true });
-  try {
-    const row = db.prepare("select platform, updated_by from setup where id = 1").get() as
-      | { platform: string; updated_by: string }
-      | undefined;
-    return row?.platform ?? null;
-  } finally {
-    db.close();
-  }
-};
+const file = () => join(dir, "data", "onboarding.json");
+
+/** Read the file back the way anything else would, not through the module under test. */
+const storedRow = (): Record<string, string> | null =>
+  existsSync(file()) ? JSON.parse(readFileSync(file(), "utf8")) : null;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 beforeEach(() => {
   vi.resetModules();
@@ -71,20 +72,28 @@ afterEach(() => {
 });
 
 describe("platformKey", () => {
-  it("is empty with no database at all — a fresh clone, which is the wizard", async () => {
+  it("is empty with no file at all — a fresh clone, which is the wizard", async () => {
     expect((await loadOnboarding()).platformKey()).toBe("");
   });
 
   it("takes the stored answer over env", async () => {
     process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "from-env";
     const { writeSetup, platformKey } = await loadOnboarding();
-    writeSetup({ platform: "acme" }, "jane");
+    writeSetup("acme", "jane");
     expect(platformKey()).toBe("acme");
   });
 
   it("falls back to env when nothing is stored — an app configured the old way", async () => {
     process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "from-env";
     expect((await loadOnboarding()).platformKey()).toBe("from-env");
+  });
+
+  it("takes the hosting's answer over both — the DM's mapping is the truth there", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "from-env";
+    const { writeSetup, platformKey } = await loadOnboarding();
+    writeSetup("acme", "jane");
+    process.env.IBLAI_PLATFORM_KEY = "hosted";
+    expect(platformKey()).toBe("hosted");
   });
 
   it("sees a write another module instance made — the server loads this file per layer", async () => {
@@ -96,11 +105,11 @@ describe("platformKey", () => {
     expect(rsc.platformKey()).toBe("");
     vi.resetModules();
     const route = await import("../lib/onboarding");
-    route.writeSetup({ platform: "acme" }, "jane");
+    route.writeSetup("acme", "jane");
     expect(rsc.platformKey()).toBe("acme");
   });
 
-  it("refuses the placeholder and ibl.ai's shared `main`, from either source", async () => {
+  it("refuses the placeholder and ibl.ai's shared `main`, from any source", async () => {
     for (const value of ["your-platform", "main"]) {
       vi.resetModules();
       process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = value;
@@ -108,51 +117,96 @@ describe("platformKey", () => {
 
       vi.resetModules();
       delete process.env.NEXT_PUBLIC_MAIN_TENANT_KEY;
-      const { writeSetup, platformKey } = await loadOnboarding();
-      writeSetup({ platform: value }, "jane");
-      expect(platformKey()).toBe("");
+      process.env.IBLAI_PLATFORM_KEY = value;
+      expect((await loadOnboarding()).platformKey()).toBe("");
+
+      vi.resetModules();
+      delete process.env.IBLAI_PLATFORM_KEY;
+      mkdirSync(join(dir, "data"), { recursive: true });
+      writeFileSync(file(), JSON.stringify({ platform: value, slug: "s" }));
+      expect((await loadOnboarding()).platformKey()).toBe("");
     }
   });
 });
 
-describe("makeSlug", () => {
-  it("is the name, readable, with a uuid that makes it unique", async () => {
-    const { makeSlug } = await loadOnboarding();
-    const slug = makeSlug("Acme Support");
-    expect(slug).toMatch(
-      /^acme-support_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
-    // Two apps called the same thing must not share an apps.<slug> entry.
-    expect(makeSlug("Acme Support")).not.toBe(slug);
+describe("writeSetup", () => {
+  it("records the platform and, minted with it, a uuid slug, and the next read sees both", async () => {
+    const { writeSetup, platformKey, storedSlug } = await loadOnboarding();
+    const row = writeSetup("acme", "jane");
+    expect(row.platform).toBe("acme");
+    expect(row.slug).toMatch(UUID);
+    expect(storedRow()).toMatchObject({ platform: "acme", slug: row.slug, updated_by: "jane" });
+    expect(storedRow()?.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    // Nothing is memoised, so these read the file that was just written.
+    expect(platformKey()).toBe("acme");
+    expect(storedSlug()).toBe(row.slug);
   });
 
-  it("flattens punctuation, case and spacing, and never trails a dash", async () => {
-    const { makeSlug } = await loadOnboarding();
-    expect(makeSlug("  Babatunde’s   Tutor!! ").split("_")[0]).toBe("babatunde-s-tutor");
+  it("is once: a second platform throws and changes nothing", async () => {
+    const { writeSetup } = await loadOnboarding();
+    const { slug } = writeSetup("acme", "jane");
+    expect(() => writeSetup("beta", "jane")).toThrow(/already set/);
+    expect(storedRow()).toMatchObject({ platform: "acme", slug });
   });
 
-  it("still answers for a name that slugifies to nothing", async () => {
-    const { makeSlug } = await loadOnboarding();
-    expect(makeSlug("日本語").split("_")[0]).toBe("app");
+  it("throws when it cannot write instead of pretending the answer was kept", async () => {
+    const { writeSetup } = await loadOnboarding();
+    // A file where the directory has to go: the same refusal a read-only
+    // filesystem gives, without depending on one.
+    writeFileSync(join(dir, "data"), "not a directory");
+    expect(() => writeSetup("acme", "jane")).toThrow(/ENOTDIR|EEXIST|ENOENT|EACCES/);
   });
 
-  it("caps the readable half so the key stays a sane length", async () => {
-    const { makeSlug } = await loadOnboarding();
-    expect(makeSlug("a".repeat(200)).split("_")[0]).toHaveLength(40);
+  it("never writes on the hosting, where the identity file is only carried", async () => {
+    const { writeSetup } = await loadOnboarding();
+    for (const env of ["production", "preview"]) {
+      process.env.VERCEL_ENV = env;
+      expect(() => writeSetup("acme", "jane")).toThrow(/hosting/);
+      expect(storedRow()).toBeNull();
+    }
+    // `vercel dev` on a laptop is not the hosting.
+    process.env.VERCEL_ENV = "development";
+    writeSetup("acme", "jane");
+    expect(storedRow()?.platform).toBe("acme");
   });
 });
 
-describe("storedSlug", () => {
-  it("is what was minted, else the override, else the shared default", async () => {
-    const { writeSetup, storedSlug } = await loadOnboarding();
+describe("readRow", () => {
+  it("reads a carried file on the hosting", async () => {
+    mkdirSync(join(dir, "data"), { recursive: true });
+    writeFileSync(file(), JSON.stringify({ platform: "acme", slug: "carried" }));
+    process.env.VERCEL_ENV = "production";
+    expect((await loadOnboarding()).readRow()).toEqual({ platform: "acme", slug: "carried" });
+  });
+
+  it("throws on a broken file rather than reading it as unanswered", async () => {
+    mkdirSync(join(dir, "data"), { recursive: true });
+    writeFileSync(file(), "{");
+    const { readRow } = await loadOnboarding();
+    expect(() => readRow()).toThrow(/JSON/);
+  });
+});
+
+describe("appSlug", () => {
+  it("is the explicit env slug, else the minted one, else the Vercel project id, else the shared default", async () => {
+    const { writeSetup } = await loadOnboarding();
     const { appSlug } = await loadPaywall();
-    // Nothing minted: the env override this suite sets.
-    expect(storedSlug()).toBe("");
+    const { slug } = writeSetup("acme", "jane");
+    // Explicit wins, even over a minted one.
     expect(appSlug()).toBe("demo-app");
 
-    writeSetup({ slug: "acme-support_uuid" }, "jane");
-    expect(storedSlug()).toBe("acme-support_uuid");
-    expect(appSlug()).toBe("acme-support_uuid");
+    delete process.env.NEXT_PUBLIC_PAYWALL_APP_SLUG;
+    vi.resetModules();
+    expect((await loadPaywall()).appSlug()).toBe(slug);
+
+    // An app published before it was set up: no file, only its project id.
+    dir = mkdtempSync(join(tmpdir(), "vibe-onboarding-hosted-"));
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    process.env.VERCEL_PROJECT_ID = "prj_x";
+    expect((await loadPaywall()).appSlug()).toBe("prj_x");
+
+    delete process.env.VERCEL_PROJECT_ID;
+    expect((await loadPaywall()).appSlug()).toBe("vibe-agent");
   });
 
   it("sees a mint another module instance made, or the browser keys apps.<slug> wrong", async () => {
@@ -160,42 +214,8 @@ describe("storedSlug", () => {
     expect(rsc.storedSlug()).toBe("");
     vi.resetModules();
     const route = await import("../lib/onboarding");
-    route.writeSetup({ slug: "acme-support_uuid" }, "jane");
-    expect(rsc.storedSlug()).toBe("acme-support_uuid");
-  });
-
-  it("keeps the platform when only the slug is written, and the other way round", async () => {
-    const { writeSetup, storedSlug, platformKey } = await loadOnboarding();
-    writeSetup({ platform: "acme" }, "jane");
-    writeSetup({ slug: "acme_uuid" }, "jane");
-    expect(platformKey()).toBe("acme");
-    expect(storedSlug()).toBe("acme_uuid");
-  });
-});
-
-describe("writeSetup", () => {
-  it("records the answer and who gave it, and the next read sees it", async () => {
-    const { writeSetup, platformKey } = await loadOnboarding();
-    writeSetup({ platform: "acme" }, "jane");
-    expect(storedPlatform()).toBe("acme");
-    // Nothing is memoised, so this reads the row that was just written.
-    expect(platformKey()).toBe("acme");
-  });
-
-  it("replaces the row rather than adding one", async () => {
-    const { writeSetup, platformKey } = await loadOnboarding();
-    writeSetup({ platform: "acme" }, "jane");
-    writeSetup({ platform: "beta" }, "jane");
-    expect(storedPlatform()).toBe("beta");
-    expect(platformKey()).toBe("beta");
-  });
-
-  it("throws when it cannot write instead of pretending the answer was kept", async () => {
-    const { writeSetup } = await loadOnboarding();
-    // A file where the directory has to go: the same refusal a deployed app's
-    // read-only filesystem gives, without depending on one.
-    writeFileSync(join(dir, "data"), "not a directory");
-    expect(() => writeSetup({ platform: "acme" }, "jane")).toThrow(/ENOTDIR|EEXIST|ENOENT|EACCES/);
+    const { slug } = route.writeSetup("acme", "jane");
+    expect(rsc.storedSlug()).toBe(slug);
   });
 });
 

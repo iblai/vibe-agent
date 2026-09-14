@@ -22,11 +22,13 @@ import { readAnswered, stepProgress } from "@/lib/setup-steps";
  *   wizard needs one they administer), and returns through the login SPA, which
  *   finishes the account and lands them back on /setup. They come back signed in
  *   on the new platform, which is then the only one they administer, so the
- *   platform question answers itself.
+ *   platform question answers itself. Only while no platform is fixed: a
+ *   published app's is, and a platform made now could never be this app's.
  */
 export function StartScreen() {
   /** The overlay's message while the browser is leaving; "" when it is not. */
   const [busy, setBusy] = useState("");
+  const [platformFixed] = useState(() => !!readAnswered().platform);
 
   const leaveFor = (message: string, url: () => string) => () => {
     saveReturnPath("/setup");
@@ -42,20 +44,26 @@ export function StartScreen() {
       {busy && <LoadingScreen overlay message={busy} />}
       <StepHeader
         title="Set up your app"
-        subtitle="Sign in with your ibl.ai account, or register for a free one. Four short questions and it is live."
+        subtitle={
+          platformFixed
+            ? "Sign in with your ibl.ai account. Three short questions and it is live."
+            : "Sign in with your ibl.ai account, or register for a free one. Four short questions and it is live."
+        }
       />
       {/* Both ways in carry the same weight: for a visitor with no ibl.ai
           account, Register is the one that matters. `flex-1` is what makes them
           exactly equal — the SDK's class already carries `w-full`. */}
       <div className="mt-6 flex gap-3">
-        <button
-          type="button"
-          disabled={!!busy}
-          className={`flex-1 ${onboardingPrimaryButtonClass}`}
-          onClick={register}
-        >
-          Register
-        </button>
+        {!platformFixed && (
+          <button
+            type="button"
+            disabled={!!busy}
+            className={`flex-1 ${onboardingPrimaryButtonClass}`}
+            onClick={register}
+          >
+            Register
+          </button>
+        )}
         <button
           type="button"
           disabled={!!busy}
