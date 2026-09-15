@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.0](https://github.com/iblai/vibe-agent/compare/v1.10.1...v1.11.0) (2026-09-15)
+
+### Features
+
+* hold visitors out of an unfinished app, name it on the sign-in page, and show only the spinner ([c497d2c](https://github.com/iblai/vibe-agent/commit/c497d2c555044cbf2d31d630b096f2eca67c3692))
+
+### Chores
+
+* update button text ([5844955](https://github.com/iblai/vibe-agent/commit/5844955fa3266d8c396726bd1e56a56b4111547c))
+
 ## [1.10.1](https://github.com/iblai/vibe-agent/compare/v1.10.0...v1.10.1) (2026-09-14)
 
 ### Bug Fixes
