@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.1](https://github.com/iblai/vibe-agent/compare/v1.10.0...v1.10.1) (2026-09-14)
+
+### Bug Fixes
+
+* keep instrumentation edge-safe and let a publish-first deploy carry its platform ([dcbce33](https://github.com/iblai/vibe-agent/commit/dcbce33f4fbfa1dc36117c74cacf9ee490aea951))
+
 ## [1.10.0](https://github.com/iblai/vibe-agent/compare/v1.9.0...v1.10.0) (2026-09-14)
 
 ### Features
