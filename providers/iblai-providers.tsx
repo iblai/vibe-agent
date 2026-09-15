@@ -19,10 +19,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Provider as ReduxProvider } from "react-redux";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { initializeDataLayer, type TokenResponse } from "@iblai/iblai-js/data-layer";
 import { AuthProvider, TenantProvider, ServiceWorkerProvider } from "@iblai/iblai-js/web-utils";
 import { Toaster } from "sonner";
 import { WebContainersI18nProvider } from "@iblai/iblai-js/web-containers/next";
+import { OnboardingShell, StepHeader } from "@iblai/iblai-js/web-containers";
 import { RadixPointerEventsGuard } from "@/components/radix-pointer-events-guard";
 import { LoadingScreen } from "@/components/loading-screen";
 
@@ -34,7 +36,7 @@ import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
 import { mintPlatformTokens, saveTokens } from "@/lib/iblai/tokens";
 import type { AppSetup } from "@/lib/paywall";
 import { applySetupToEnv } from "@/lib/onboarding-client";
-import { currentSetupStep, readAnswered, setupPath } from "@/lib/setup-steps";
+import { beingConfigured, currentSetupStep, readAnswered, setupPath } from "@/lib/setup-steps";
 
 const storageService = LocalStorageService.getInstance();
 
@@ -45,6 +47,29 @@ function RedirectToSetup() {
     router.replace(setupPath(currentSetupStep(readAnswered())));
   }, [router]);
   return <LoadingScreen />;
+}
+
+/**
+ * An app whose owner is still answering the wizard, seen by someone with no
+ * session. They are held here instead of being sent to the login SPA's join
+ * page: registering would link them to the platform as a member of an app that
+ * has no agent yet, or no price. The quiet line is the owner's own way in —
+ * `/setup` signs them in and reopens the wizard where they left it.
+ */
+function BeingConfigured() {
+  return (
+    <OnboardingShell totalSteps={1} currentStep={1}>
+      <StepHeader
+        title="This app is being configured"
+        subtitle="Its owner is still setting it up. Check back soon."
+      />
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        <Link className="underline-offset-4 hover:underline" href="/setup">
+          Are you the owner? Finish setting it up
+        </Link>
+      </p>
+    </OnboardingShell>
+  );
 }
 
 // The SDK dropdown labels its learner-mode item "Learner / Instructor"; this
@@ -131,26 +156,36 @@ export function IblaiProviders({ children, setup }: { children: ReactNode; setup
 
   if (!isInitialized || !mounted) return LOADING;
 
-  // Nobody has chosen a platform yet: the setup wizard, not the app. There is
-  // no AuthProvider or TenantProvider here — both need a platform — so the
-  // wizard signs the visitor in itself, on the platform-less login URL, and
-  // picks the platform up from there. The app mounts for real on the reload
-  // after the platform is written.
+  // Redux, toasts and the SDK's English catalog — what a screen outside the app
+  // needs, and no more. Deliberately without AuthProvider: its redirect to the
+  // login SPA's join page runs from an effect and its `skip` prop does not stop
+  // it (the hook reads `skipAuthCheck`), so not mounting it is the only way to
+  // keep a visitor here. TenantProvider needs a platform and goes with it.
+  const lite = (node: ReactNode) => (
+    <ReduxProvider store={iblaiStore}>
+      <Toaster />
+      <WebContainersI18nProvider messages={SDK_MESSAGES}>{node}</WebContainersI18nProvider>
+    </ReduxProvider>
+  );
+
+  // Nobody has chosen a platform yet: the setup wizard, not the app. The wizard
+  // signs the visitor in itself, on the platform-less login URL, and picks the
+  // platform up from there. The app mounts for real on the reload after the
+  // platform is written.
   //
   // The wizard owns its URLs: a route under /setup renders, and each step's
   // page decides for itself whether it still applies. Any other page asked for
   // is sent to the step the app is on, so the address bar never claims to be
   // somewhere this app cannot be yet.
-  if (!tenantKey) {
-    return (
-      <ReduxProvider store={iblaiStore}>
-        <Toaster />
-        <WebContainersI18nProvider messages={SDK_MESSAGES}>
-          {isSsoRoute || isSetupRoute ? children : <RedirectToSetup />}
-        </WebContainersI18nProvider>
-      </ReduxProvider>
-    );
-  }
+  if (!tenantKey) return lite(isSsoRoute || isSetupRoute ? children : <RedirectToSetup />);
+
+  // A platform has claimed this app, the wizard is not finished, and this
+  // visitor has no session: the calm screen rather than the join page, so nobody
+  // is signed up into an app that cannot answer them yet. Signed-in people are
+  // never held — see `beingConfigured`. /setup stays open: it is where the owner
+  // signs in and finishes.
+  if (beingConfigured(readAnswered(), setup.ready))
+    return lite(isSsoRoute || isSetupRoute ? children : <BeingConfigured />);
 
   const AUTH_FAILURE = (
     <div className="flex min-h-screen items-center justify-center">

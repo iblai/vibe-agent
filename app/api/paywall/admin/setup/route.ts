@@ -63,7 +63,12 @@ export async function POST(req: NextRequest) {
 
   try {
     invalidateAppPaymentInfo();
-    const { info: current, platformName, branding } = await readAppPaymentInfo();
+    // `name` is the app's own, answered on the agent step and kept in the
+    // platform's metadata: it heads the platform's sign-in page and names the
+    // Stripe product. Without it both fall back to the platform's name, which
+    // on a platform made through ibl.ai's $0 sign-up is a random key.
+    const { info: current, platformName, branding, name } = await readAppPaymentInfo();
+    const appName = name || config.appName();
     // The platform's Stripe source right now: what the product and price are
     // created on, and whose publishable key and account the record carries.
     const source = paid
@@ -120,7 +125,7 @@ export async function POST(req: NextRequest) {
           method: "POST",
           headers: idem("product"),
           body: JSON.stringify({
-            name: config.appName() || platformName || appSlug(),
+            name: appName || platformName || appSlug(),
             metadata: { app: appSlug() },
           }),
         });
@@ -162,7 +167,7 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
       updated_by: caller.username,
     };
-    await writeAppPaymentInfo(caller.token, info, platformName, branding);
+    await writeAppPaymentInfo(caller.token, info, branding, appName);
     return NextResponse.json({ info });
   } catch (e) {
     return failure(e);

@@ -376,9 +376,12 @@ of users:
   `GET /api/ai-mentor/providers/vercel/hosting/projects/<VERCEL_PROJECT_ID>/`
   which platform deployed this Vercel project (the DM's `HostingProject` row
   is the mapping) and leaves the answer in `process.env.IBLAI_PLATFORM_KEY`,
-  the first rung of `platformKey()`. A carried file naming another platform,
-  or a DM error, throws there and the instance serves nothing until a healthy
-  cold start — loud, no retry loop. A 404 means the app was put on Vercel
+  the first rung of `platformKey()`. A DM error throws there and the instance
+  serves nothing until a healthy cold start — loud, no retry loop. A carried
+  file naming another platform throws too, but from `platformKey()`
+  (`lib/onboarding.ts`), where the file is already read: `instrumentation.ts`
+  is compiled for the edge runtime as well, so it may not import anything that
+  touches `node:fs`. A 404 means the app was put on Vercel
   outside ibl.ai hosting: env is the way. An app published before it was set
   up has no file at all: its slug is `VERCEL_PROJECT_ID` (permanent, the same
   on every deploy) and the wizard opens at the agent question on the published
@@ -416,6 +419,23 @@ of users:
   or signs one in and links it to the platform (the app has no form of its
   own); the app never creates users or links them, and everyone who arrives
   is a member.
+- **Nobody registers into an app that is not finished.** A platform has
+  claimed it, a question is still unanswered and the visitor has no session:
+  they get the calm "This app is being configured" screen, not the join page
+  (`beingConfigured` in `lib/setup-steps.ts`, branched in
+  `providers/iblai-providers.tsx`). Three clauses, each load-bearing. **Signed
+  out only** — that screen renders without the SDK's `AuthProvider`, the only
+  way to stop its redirect (`skip` does not: the hook reads `skipAuthCheck`),
+  and dropping it also drops `TenantProvider`, the one thing that rewrites the
+  `tenants` list every sign-in clears; a held admin would be told they are not
+  one, mid-wizard. **A platform** — a fresh clone is unclaimed, not being
+  configured, and its first screen is the wizard. **Agent and `ready`** —
+  `ready` is the price question, which only the server can see
+  (`resolveSetup`), so it rides the same prop as the rest of the setup and
+  defaults to true whenever the DM read fails: a hiccup must never hide a live
+  app. `/setup/*` and `/sso-login*` stay open, and `stepApplies` offers a
+  visitor with no session no step but `start` — the rest save on the admin's
+  own token. A member who is already signed in reads the same words on `/`.
 - The app holds no platform secret at runtime: no `IBLAI_API_KEY`, no Stripe
   key. The buyer rail runs in the browser on the buyer's own DM token; the
   admin routes forward the admin's own token. The one exception is a write: at
@@ -540,19 +560,24 @@ branding: it reads `metadata.auth_web_<app>` from the platform's public
 metadata — `display_title_info` as the heading, `title` as the tab,
 `display_description_info` as the line under it — under its default app,
 `mentorai` (the join URL names none; its normalizer maps every unknown value
-there too), so `auth_web_mentorai` is the key. The setup route touches it on
-every save (`loginBranding()` in `lib/paywall.ts`) without editing a word the
-platform wrote: the title and the heading are sent only when it has none (the
-app's name from env, else the platform's), and the price line — `$29/month`,
-`$49`, `Free` — is appended to its description after a middle dot, replacing
-a price appended before rather than stacking one. A description that is
-nothing but a price came from this app before it learned to append, so it
-counts as ours and goes. The write rides the same deep-merge PUT as the
-choice, so every key it omits — the platform's title, its logo, its images —
-keeps its stored value. The same key brands the platform's OS login: one
-platform, one app. A rename (`NEXT_PUBLIC_APP_NAME`) reaches the login
-screens on the next save, but only where the platform never set a title of
-its own.
+there too), so `auth_web_mentorai` is the key. Both writers touch it
+(`loginBranding()` in `lib/paywall.ts`) without editing a word the platform
+wrote: the title and the heading are sent only when it has none, and the price
+line — `Join free`, `Unlock for $49`, `$29 a month, cancel any time` — is
+appended to its description after a middle dot, replacing a price appended
+before rather than stacking one. A description that is nothing but a price came
+from this app before it learned to append, so it counts as ours and goes; the
+bare forms older releases wrote (`$29/month`, `Free`) are still recognised for
+exactly that reason, and dropping them from `PRICE_LINE` would stack two prices
+on any platform saved before this. The heading is **the app's own name and
+nothing else**: it used to fall back to the platform's, which on a platform made
+through ibl.ai's $0 sign-up is a random key — written once and then pinned there
+for good by the "only when it has none" rule. With no app name, no heading is
+written at all. The name save writes it too (`writeAppConfig`, with no price),
+so a rename reaches the login screens at once instead of waiting for the next
+save of the price question. Both writes ride a deep-merge PUT, so every key
+omitted — the platform's title, its logo, its images — keeps its stored value.
+The same key brands the platform's OS login: one platform, one app.
 
 The join page does the joining: it makes the account (email, password, on
 edX) or signs an existing one in, calls the platform's self-link with the
@@ -906,6 +931,11 @@ forms/manage/<form_id>` with `platform_key` in the query string as well as
 - A new env key lands in `.env.example` and the README in the same change; a new
   route lands with a test in `__tests__/` using the fetch-stub pattern there.
 - A busy moment the user must not interrupt (saving, redirecting, checking a
-  payment) renders `LoadingScreen overlay` with a short message, and the form's
-  controls stay disabled underneath; plain loading states render `LoadingScreen`
-  too. No bespoke spinners or grey "Loading..." text.
+  payment) renders `LoadingScreen overlay`, and the form's controls stay
+  disabled underneath; plain loading states render `LoadingScreen` too. No
+  bespoke spinners, no grey "Loading..." text, and **nothing under the arc**:
+  its `message` is the accessible name only, announced and never drawn. A
+  screen that is still loading shows the arc alone — never a header with a
+  half-built form under it that rearranges as its answers arrive, which is why
+  every wizard step decides `ready` before it paints
+  (`components/setup/setup-screen.tsx`).

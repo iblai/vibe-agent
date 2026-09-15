@@ -240,13 +240,16 @@ describe("resolveSetup", () => {
     process.env.NEXT_PUBLIC_APP_NAME = "Env Name";
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>(async () => metadataResponse({ agent: "uuid-1", name: "Acme Support" })),
+      vi.fn<typeof fetch>(async () =>
+        metadataResponse({ agent: "uuid-1", name: "Acme Support", access: "free", stripe: {} }),
+      ),
     );
     expect(await (await loadPaywall()).resolveSetup()).toEqual({
       platform: "acme",
       agent: "uuid-1",
       name: "Acme Support",
       slug: "demo-app",
+      ready: true,
     });
   });
 
@@ -263,7 +266,39 @@ describe("resolveSetup", () => {
       agent: "env-agent",
       name: "Env Name",
       slug: "demo-app",
+      ready: true,
     });
+  });
+
+  it("is not ready while the price question is unanswered: the wizard is still running", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "acme";
+    vi.stubGlobal(
+      "fetch",
+      // The agent step has written, the access step has not: no `access`, so
+      // `info` is null.
+      vi.fn<typeof fetch>(async () => metadataResponse({ agent: "uuid-1", name: "Acme Support" })),
+    );
+    expect((await (await loadPaywall()).resolveSetup()).ready).toBe(false);
+  });
+
+  it("stays ready when the public read fails, so a DM hiccup never hides a live app", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "acme";
+    process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID = "env-agent";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => Response.json({ error: "nope" }, { status: 500 })),
+    );
+    expect((await (await loadPaywall()).resolveSetup()).ready).toBe(true);
+  });
+
+  it("stays ready for an app configured the old way: nothing of ours stored, an agent in env", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "acme";
+    process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID = "env-agent";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => metadataResponse({})),
+    );
+    expect((await (await loadPaywall()).resolveSetup()).ready).toBe(true);
   });
 
   it("keeps a configured app working when the public read fails", async () => {
@@ -303,26 +338,81 @@ describe("resolveSetup", () => {
       agent: "",
       name: "",
       slug: "",
+      ready: false,
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
 describe("writeAppConfig", () => {
+  /** The read it makes first, then the PUT. */
+  const readThenWrite = () =>
+    vi.fn<typeof fetch>(async (_input, init) =>
+      init?.method === "PUT" ? Response.json({ ok: true }) : metadataResponse({}),
+    );
+
+  const putBody = (mock: ReturnType<typeof readThenWrite>) => {
+    const [, init] = mock.mock.calls.find(([, i]) => i?.method === "PUT") as [string, RequestInit];
+    return JSON.parse(init.body as string);
+  };
+
   it("PUTs only its own keys, so the paywall choice survives the platform's deep merge", async () => {
     process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "acme";
-    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ ok: true }));
+    const fetchMock = readThenWrite();
     vi.stubGlobal("fetch", fetchMock);
     const { writeAppConfig } = await loadPaywall();
 
     await writeAppConfig("tok-1", { agent: "uuid-1", name: "Acme Support" });
 
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls.find(([, i]) => i?.method === "PUT") as [
+      string,
+      RequestInit,
+    ];
     expect(String(url)).toBe("https://api.example.edu/dm/api/core/orgs/acme/metadata/");
-    expect(init.method).toBe("PUT");
     expect((init.headers as Record<string, string>).Authorization).toBe("Token tok-1");
-    expect(JSON.parse(init.body as string)).toEqual({
-      metadata: { apps: { "demo-app": { agent: "uuid-1", name: "Acme Support" } } },
+    expect(putBody(fetchMock).metadata.apps).toEqual({
+      "demo-app": { agent: "uuid-1", name: "Acme Support" },
     });
+  });
+
+  it("heads the platform's sign-in page with the app's name, so a rename reaches it at once", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "acme";
+    const fetchMock = readThenWrite();
+    vi.stubGlobal("fetch", fetchMock);
+    const { writeAppConfig } = await loadPaywall();
+
+    await writeAppConfig("tok-1", { agent: "uuid-1", name: "Caveman Coach" });
+
+    // The heading, and no price: none has been decided at the agent step, and an
+    // omitted key keeps whatever the platform has stored.
+    expect(putBody(fetchMock).metadata.auth_web_mentorai).toEqual({
+      title: "Caveman Coach",
+      display_title_info: "Caveman Coach",
+    });
+  });
+
+  it("leaves a heading the platform already has, even on a rename", async () => {
+    process.env.NEXT_PUBLIC_MAIN_TENANT_KEY = "acme";
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) =>
+      init?.method === "PUT"
+        ? Response.json({ ok: true })
+        : Response.json({
+            platform_name: "Acme",
+            metadata: {
+              apps: { "demo-app": {} },
+              auth_web_mentorai: { title: "Search Craft", display_title_info: "Search Craft" },
+            },
+          }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { writeAppConfig } = await loadPaywall();
+
+    await writeAppConfig("tok-1", { name: "Caveman Coach" });
+
+    const [, init] = fetchMock.mock.calls.find(([, i]) => i?.method === "PUT") as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(init.body as string).metadata.auth_web_mentorai).toEqual({});
   });
 });

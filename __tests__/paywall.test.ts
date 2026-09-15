@@ -168,27 +168,43 @@ describe("priceLine", () => {
   const info = (over: Record<string, unknown>) =>
     ({ access: "one_time", amount: 4900, currency: "usd", ...over }) as never;
 
-  it("says what the platform charges, cents only when there are any", async () => {
+  it("invites rather than quotes, cents only when there are any", async () => {
     const { priceLine } = await loadPaywall();
-    expect(priceLine(info({}))).toBe("$49");
-    expect(priceLine(info({ amount: 2990 }))).toBe("$29.90");
-    expect(priceLine(info({ access: "monthly", amount: 2900 }))).toBe("$29/month");
-    expect(priceLine(info({ access: "monthly", amount: 2990 }))).toBe("$29.90/month");
-    expect(priceLine(info({ access: "free", amount: null }))).toBe("Free");
-    expect(priceLine(info({ amount: null }))).toBe("Free");
+    expect(priceLine(info({}))).toBe("Unlock for $49");
+    expect(priceLine(info({ amount: 2990 }))).toBe("Unlock for $29.90");
+    expect(priceLine(info({ access: "monthly", amount: 2900 }))).toBe(
+      "$29 a month, cancel any time",
+    );
+    expect(priceLine(info({ access: "monthly", amount: 2990 }))).toBe(
+      "$29.90 a month, cancel any time",
+    );
+    expect(priceLine(info({ access: "free", amount: null }))).toBe("Join free");
+    expect(priceLine(info({ amount: null }))).toBe("Join free");
   });
 });
 
 describe("descriptionWithoutPrice", () => {
   it("keeps what the platform wrote and takes back only a price this app appended", async () => {
     const { descriptionWithoutPrice } = await loadPaywall();
+    expect(
+      descriptionWithoutPrice(
+        "Learn the craft, earn the traffic · $29.90 a month, cancel any time",
+      ),
+    ).toBe("Learn the craft, earn the traffic");
+    expect(descriptionWithoutPrice("Learn the craft · Join free")).toBe("Learn the craft");
+    expect(descriptionWithoutPrice("Learn the craft · Unlock for $49")).toBe("Learn the craft");
+    expect(descriptionWithoutPrice("Learn the craft, earn the traffic")).toBe(
+      "Learn the craft, earn the traffic",
+    );
+  });
+
+  it("recognises the bare price lines older releases appended, so a save swaps instead of stacking", async () => {
+    const { descriptionWithoutPrice } = await loadPaywall();
     expect(descriptionWithoutPrice("Learn the craft, earn the traffic · $29.90/month")).toBe(
       "Learn the craft, earn the traffic",
     );
     expect(descriptionWithoutPrice("Learn the craft · Free")).toBe("Learn the craft");
-    expect(descriptionWithoutPrice("Learn the craft, earn the traffic")).toBe(
-      "Learn the craft, earn the traffic",
-    );
+    expect(descriptionWithoutPrice("Learn the craft · $49")).toBe("Learn the craft");
   });
 
   it("treats a line that is nothing but a price as this app's own, and drops it", async () => {
@@ -197,6 +213,8 @@ describe("descriptionWithoutPrice", () => {
     expect(descriptionWithoutPrice("$15")).toBe("");
     expect(descriptionWithoutPrice("$29.90/month")).toBe("");
     expect(descriptionWithoutPrice("Free")).toBe("");
+    expect(descriptionWithoutPrice("Join free")).toBe("");
+    expect(descriptionWithoutPrice("$29 a month, cancel any time")).toBe("");
   });
 
   it("leaves a line that merely mentions money, and copes with nothing at all", async () => {

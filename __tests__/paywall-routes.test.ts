@@ -284,12 +284,10 @@ describe("POST /api/paywall/admin/setup", () => {
             updated_by: "jane",
           },
         },
-        // The login SPA's branding for the platform, in the same PUT.
-        auth_web_mentorai: {
-          title: "Acme",
-          display_title_info: "Acme",
-          display_description_info: "Free",
-        },
+        // The login SPA's branding for the platform, in the same PUT. No
+        // heading: this app has no name of its own here, and the platform's own
+        // name is not one to write in its place.
+        auth_web_mentorai: { display_description_info: "Join free" },
       },
     });
     expect((await res.json()).info.access).toBe("free");
@@ -309,7 +307,30 @@ describe("POST /api/paywall/admin/setup", () => {
     expect(metaWrites[0].body.metadata.auth_web_mentorai).toEqual({
       title: "Caveman Coach",
       display_title_info: "Caveman Coach",
-      display_description_info: "$29/month",
+      display_description_info: "$29 a month, cancel any time",
+    });
+  });
+
+  it("takes the app's name from the wizard's own answer, not the platform's name", async () => {
+    // The name lives in the platform's metadata, never in env: this app is set
+    // up in the browser. Reading it is what keeps a platform made through
+    // ibl.ai's $0 sign-up — whose name is a random key — off its own sign-in
+    // page and off the Stripe checkout page.
+    stubFetch({
+      apps: { "demo-app": { agent: "uuid-1", name: "Caveman Coach" } },
+      dm: stripeDm({
+        "POST /products/": () => ({ id: "prod_new" }),
+        "POST /prices/": () => ({ id: "price_new" }),
+      }),
+    });
+    const { POST } = await loadSetup();
+
+    expect((await POST(post({ access: "one_time", amount: 4900 }))).status).toBe(200);
+    expect(sentBody(0)).toEqual({ name: "Caveman Coach", metadata: { app: "demo-app" } });
+    expect(metaWrites[0].body.metadata.auth_web_mentorai).toEqual({
+      title: "Caveman Coach",
+      display_title_info: "Caveman Coach",
+      display_description_info: "Unlock for $49",
     });
   });
 
@@ -327,7 +348,8 @@ describe("POST /api/paywall/admin/setup", () => {
     expect((await POST(post({ access: "monthly", amount: 2990 }))).status).toBe(200);
     // Neither title is written at all: the platform's merge keeps what it has.
     expect(metaWrites[0].body.metadata.auth_web_mentorai).toEqual({
-      display_description_info: "Learn the craft, earn the traffic · $29.90/month",
+      display_description_info:
+        "Learn the craft, earn the traffic · $29.90 a month, cancel any time",
     });
   });
 
@@ -340,7 +362,7 @@ describe("POST /api/paywall/admin/setup", () => {
 
     expect((await POST(post({ access: "one_time", amount: 4900 }))).status).toBe(200);
     expect(metaWrites[0].body.metadata.auth_web_mentorai.display_description_info).toBe(
-      "Learn the craft, earn the traffic · $49",
+      "Learn the craft, earn the traffic · Unlock for $49",
     );
   });
 
@@ -423,7 +445,9 @@ describe("POST /api/paywall/admin/setup", () => {
       amount: 4900,
       stripe: { product_id: "prod_1", price_id: "price_2" },
     });
-    expect(metaWrites[0].body.metadata.auth_web_mentorai.display_description_info).toBe("$49");
+    expect(metaWrites[0].body.metadata.auth_web_mentorai.display_description_info).toBe(
+      "Unlock for $49",
+    );
   });
 
   it("replaces a product that is gone or no longer tagged", async () => {

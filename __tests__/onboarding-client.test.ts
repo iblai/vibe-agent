@@ -63,14 +63,20 @@ afterEach(() => {
 describe("applySetupToEnv", () => {
   it("never writes an empty value: config coalesces with ??, so it would shadow the build-time one", async () => {
     const { applySetupToEnv } = await load();
-    applySetupToEnv({ platform: "acme", agent: "", name: "", slug: "" });
+    applySetupToEnv({ platform: "acme", agent: "", name: "", slug: "", ready: false });
     expect(window.__ENV__).toEqual({ NEXT_PUBLIC_MAIN_TENANT_KEY: "acme" });
   });
 
   it("writes what it has, over anything already there", async () => {
     window.__ENV__ = { NEXT_PUBLIC_APP_NAME: "Old", NEXT_PUBLIC_SHOW_ABOUT: "true" };
     const { applySetupToEnv } = await load();
-    applySetupToEnv({ platform: "acme", agent: "uuid-1", name: "New", slug: "new_uuid" });
+    applySetupToEnv({
+      platform: "acme",
+      agent: "uuid-1",
+      name: "New",
+      slug: "new_uuid",
+      ready: true,
+    });
     expect(window.__ENV__).toEqual({
       NEXT_PUBLIC_SHOW_ABOUT: "true",
       NEXT_PUBLIC_MAIN_TENANT_KEY: "acme",

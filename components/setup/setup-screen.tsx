@@ -135,6 +135,8 @@ export function SetupScreen({ step }: { step: SetupStep }) {
   const [access, setAccess] = useState<Access | null>(null);
   const [amount, setAmount] = useState("29");
   const [status, setStatus] = useState<ConnectStatus | null>(null);
+  /** The access step's own arrival work is done: the saved answer and the Stripe source are in. */
+  const [loaded, setLoaded] = useState(false);
   /** The overlay's message while the page is busy; "" when it is not. */
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -216,6 +218,11 @@ export function SetupScreen({ step }: { step: SetupStep }) {
           await save(pending.access, pending.amount);
       } catch (e) {
         setError(errorMessage(e));
+      } finally {
+        // Outside the try, and after the save on a Stripe return: whatever
+        // happened, the step may now be drawn — spinning forever would hide the
+        // error that was just set.
+        setLoaded(true);
       }
     })();
     // Once, on mount: `step`, `returned`, `platform` and `router` do not change.
@@ -455,8 +462,26 @@ export function SetupScreen({ step }: { step: SetupStep }) {
     </p>
   );
 
-  // A step that no longer applies: the guard is sending them to the one that does.
-  if (!applies) return <LoadingScreen />;
+  /**
+   * Whether this step can be drawn finished. Nothing paints before it can: a
+   * question that rearranges itself as its own answers arrive — a radio
+   * selecting itself, a price field appearing, a footnote dropping in — reads as
+   * a glitch, and the platform question with one platform is being answered by
+   * the effect above before anyone could read it.
+   */
+  const ready =
+    step === "platform"
+      ? !tenantsLoading && ownPlatforms.length !== 1
+      : step === "agent"
+        ? !!agentRows
+        : step === "access"
+          ? loaded
+          : true;
+
+  // A step that no longer applies: the guard is sending them to the one that
+  // does. An error is the way out of `ready` — a failed save clears `busy`
+  // without leaving the page, and its message lives in the form below.
+  if (!applies || (!ready && !error)) return <LoadingScreen />;
 
   return (
     <OnboardingShell totalSteps={totalSteps} currentStep={currentStep}>
@@ -469,7 +494,9 @@ export function SetupScreen({ step }: { step: SetupStep }) {
             title="Which platform is this app for?"
             subtitle="Your space on ibl.ai: its agents, its people, its sign-in page. Answered once."
           />
-          {tenantsLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {/* Only once the list is in: the guard above already waits for it,
+              except on the error path, and "you have no platform" is the wrong
+              thing to say to someone whose list simply has not arrived. */}
           {!tenantsLoading && ownPlatforms.length === 0 && (
             <div className="space-y-3">
               <p className="text-sm text-gray-500">
@@ -526,7 +553,6 @@ export function SetupScreen({ step }: { step: SetupStep }) {
             subtitle="One app, one agent. The name is what people see; you can change both here whenever you like."
           />
           {note && <p className="mb-4 text-xs text-muted-foreground">{note}</p>}
-          {!agentRows && <p className="text-sm text-muted-foreground">Loading…</p>}
           {agentRows && !makingAgent && (
             <div className="space-y-3">
               {/* Searched on the platform, not filtered here: the list is a page,

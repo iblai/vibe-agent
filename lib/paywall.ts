@@ -253,7 +253,19 @@ export async function readAppPaymentInfo(fresh = false): Promise<InfoRead> {
   return infoCache;
 }
 
-export type AppSetup = { platform: string; agent: string; name: string; slug: string };
+export type AppSetup = {
+  platform: string;
+  agent: string;
+  name: string;
+  slug: string;
+  /**
+   * Whether the wizard is finished — the price question answered, not just the
+   * platform and the agent. The providers hold a signed-out visitor on the
+   * "being configured" screen until it is true, so nobody registers into an app
+   * that is still being set up (`beingConfigured` in lib/setup-steps.ts).
+   */
+  ready: boolean;
+};
 
 /**
  * What this app is configured as: the platform from `.env.local` or env, the
@@ -268,11 +280,18 @@ export type AppSetup = { platform: string; agent: string; name: string; slug: st
  */
 export async function resolveSetup(): Promise<AppSetup> {
   const platform = platformKey();
-  if (!platform) return { platform: "", agent: "", name: "", slug: "" };
+  if (!platform) return { platform: "", agent: "", name: "", slug: "", ready: false };
   let stored = { agent: "", name: "" };
+  // Stays true if the read never lands: a DM hiccup must not tell every visitor
+  // the app is unfinished and hide one that is live.
+  let ready = true;
   try {
     const read = await readAppPaymentInfo(true);
     stored = { agent: read.agent, name: read.name };
+    // The price question is answered — or this app was configured the old way,
+    // nothing of ours in the platform's metadata and an agent in env, which has
+    // served visitors since before there was a wizard to finish.
+    ready = read.info !== null || (!read.agent && !!config.defaultAgentId());
   } catch {
     // A public read that hiccuped must not blank a configured app: fall back
     // to env rather than showing the wizard to everyone.
@@ -283,6 +302,7 @@ export async function resolveSetup(): Promise<AppSetup> {
     name: stored.name || config.appName(),
     // The browser's own paywall calls key on this too (lib/paywall-client.ts).
     slug: appSlug(),
+    ready,
   };
 }
 
@@ -290,31 +310,47 @@ export async function resolveSetup(): Promise<AppSetup> {
  * Record the wizard's agent and name beside the paywall choice, as the admin
  * (their own token; the DM checks the role). The DM deep-merges, so the
  * choice's own keys survive a write that never mentions them.
+ *
+ * The name goes out twice: under `apps.<slug>`, and — where the platform has no
+ * heading of its own — as the heading of its sign-in page, so a rename reaches
+ * the login screens now instead of waiting for the next save of the price
+ * question. No price is invented here; the description is left alone.
  */
 export async function writeAppConfig(
   token: string,
   patch: { agent?: string; name?: string },
 ): Promise<void> {
+  const { branding } = await readAppPaymentInfo();
   await dmJson(
     await fetch(metadataUrl(), {
       method: "PUT",
       headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ metadata: { apps: { [appSlug()]: patch } } }),
+      body: JSON.stringify({
+        metadata: {
+          apps: { [appSlug()]: patch },
+          [LOGIN_BRANDING_KEY]: loginBranding(null, branding, patch.name),
+        },
+      }),
       cache: "no-store",
     }),
   );
   invalidateAppPaymentInfo();
 }
 
-/** What the login screens say under the app's name: the price, or that it is free. USD only. */
+/**
+ * What the login screens say under the app's name: an invitation, not a price
+ * tag. It has to read as well appended to the platform's own sentence — after
+ * the middle dot in `loginBranding` — as it does standing alone on a platform
+ * that says nothing else. USD only.
+ */
 export function priceLine(info: AppPaymentInfo): string {
-  if (info.access === "free" || info.amount === null) return "Free";
+  if (info.access === "free" || info.amount === null) return "Join free";
   const amount = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: info.amount % 100 ? 2 : 0,
   }).format(info.amount / 100);
-  return info.access === "monthly" ? `${amount}/month` : amount;
+  return info.access === "monthly" ? `${amount} a month, cancel any time` : `Unlock for ${amount}`;
 }
 
 /**
@@ -338,8 +374,17 @@ export type LoginBranding = {
 
 /** What separates the platform's own line from the price this app appends. */
 const PRICE_SEPARATOR = " · ";
-/** Exactly what priceLine() can produce: Free, $49, $29.90, and the monthly forms. */
-const PRICE_LINE = /^(Free|\$\d[\d,]*(\.\d{2})?(\/month)?)$/;
+const AMOUNT = String.raw`\$\d[\d,]*(\.\d{2})?`;
+/**
+ * Every line this app has ever appended — what priceLine() writes today, and the
+ * bare forms older releases wrote. Both have to be recognised: a re-save swaps
+ * the line it finds, so a platform still holding `$29/month` would otherwise end
+ * up reading `… · $29/month · $29 a month, cancel any time`.
+ */
+const PRICE_LINE = new RegExp(
+  `^(Join free|Unlock for ${AMOUNT}|${AMOUNT} a month, cancel any time` +
+    `|Free|${AMOUNT}(/month)?)$`,
+);
 
 /**
  * The platform's own description, with a price this app appended previously
@@ -357,24 +402,34 @@ export function descriptionWithoutPrice(text: unknown): string {
 }
 
 /**
- * The branding to PUT beside the choice. The platform's title and heading are
- * never edited — they are written only when it has none, so a fresh platform
- * is not blank — and the price joins its description rather than replacing it.
- * The DM merges, so a field left out here keeps whatever is stored.
+ * The branding to PUT beside the choice. The platform's own words are never
+ * edited: the title and the heading are written only where it has none, and the
+ * price joins its description rather than replacing it. The DM merges, so a
+ * field left out here keeps whatever is stored.
+ *
+ * The heading is the app's name and nothing else. It used to fall back to the
+ * platform's name, which is how a platform made through ibl.ai's $0 sign-up —
+ * where that name is a random key — ended up with the key as its sign-in
+ * heading, pinned there for good by this function's own "only when it has none"
+ * rule. With no app name, write no heading and leave the SPA its default.
+ *
+ * {info} is null at the agent step, which names the app before any price is
+ * decided: the heading is written, the description untouched.
  */
 export function loginBranding(
-  info: AppPaymentInfo,
-  platformName: string,
+  info: AppPaymentInfo | null,
   existing: LoginBranding = {},
   appName: string = config.appName(),
 ): LoginBranding {
-  const name = appName || platformName;
-  const price = priceLine(info);
+  const name = appName.trim();
   const said = descriptionWithoutPrice(existing.display_description_info);
+  const price = info && priceLine(info);
   return {
-    ...(existing.title ? {} : { title: name }),
-    ...(existing.display_title_info ? {} : { display_title_info: name }),
-    display_description_info: said ? `${said}${PRICE_SEPARATOR}${price}` : price,
+    ...(existing.title || !name ? {} : { title: name }),
+    ...(existing.display_title_info || !name ? {} : { display_title_info: name }),
+    ...(price
+      ? { display_description_info: said ? `${said}${PRICE_SEPARATOR}${price}` : price }
+      : {}),
   };
 }
 
@@ -387,7 +442,6 @@ export function loginBranding(
 export async function writeAppPaymentInfo(
   token: string,
   info: AppPaymentInfo,
-  platformName: string,
   existing: LoginBranding = {},
   appName?: string,
 ): Promise<void> {
@@ -398,7 +452,7 @@ export async function writeAppPaymentInfo(
       body: JSON.stringify({
         metadata: {
           apps: { [appSlug()]: info },
-          [LOGIN_BRANDING_KEY]: loginBranding(info, platformName, existing, appName),
+          [LOGIN_BRANDING_KEY]: loginBranding(info, existing, appName),
         },
       }),
       cache: "no-store",

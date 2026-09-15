@@ -5,6 +5,7 @@ import {
   OnboardingShell,
   StepHeader,
   onboardingPrimaryButtonClass,
+  onboardingSecondaryButtonClass,
 } from "@iblai/iblai-js/web-containers";
 import { LoadingScreen } from "@/components/loading-screen";
 import { authLoginUrl, saveReturnPath } from "@/lib/iblai/auth-utils";
@@ -50,15 +51,18 @@ export function StartScreen() {
             : "Sign in with your ibl.ai account, or register for a free one. Four short questions and it is live."
         }
       />
-      {/* Both ways in carry the same weight: for a visitor with no ibl.ai
-          account, Register is the one that matters. `flex-1` is what makes them
-          exactly equal — the SDK's class already carries `w-full`. */}
-      <div className="mt-6 flex gap-3">
+      {/* One of the two is the answer for almost everyone who reaches this
+          screen: a creator with nothing yet, for whom Register makes the account
+          and the platform in one $0 trip. It leads, and signing in is the quiet
+          line under it. Where the platform is already fixed (a published app)
+          there is no Register at all, so Start takes the emphasis back rather
+          than leaving the screen nothing but a grey link. */}
+      <div className="mt-6 space-y-3">
         {!platformFixed && (
           <button
             type="button"
             disabled={!!busy}
-            className={`flex-1 ${onboardingPrimaryButtonClass}`}
+            className={onboardingPrimaryButtonClass}
             onClick={register}
           >
             Register
@@ -67,10 +71,10 @@ export function StartScreen() {
         <button
           type="button"
           disabled={!!busy}
-          className={`flex-1 ${onboardingPrimaryButtonClass}`}
+          className={platformFixed ? onboardingPrimaryButtonClass : onboardingSecondaryButtonClass}
           onClick={start}
         >
-          Start
+          {platformFixed ? "Start" : "Already have an account? Start"}
         </button>
       </div>
     </OnboardingShell>

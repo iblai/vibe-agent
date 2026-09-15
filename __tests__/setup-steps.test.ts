@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  beingConfigured,
   currentSetupStep,
   isSetupStep,
   setupPath,
@@ -53,6 +54,45 @@ describe("stepApplies", () => {
       expect(stepApplies(step, configured)).toBe(true);
       expect(stepApplies(step, signedIn)).toBe(false);
     }
+  });
+
+  it("offers no step but start without a session: every other one saves on the admin's token", () => {
+    // Otherwise a signed-out visitor who types /setup/access is handed a
+    // question whose Save can only ever answer 401.
+    const signedOutOnAClaimedApp = { ...configured, signedIn: false };
+    for (const step of ["platform", "agent", "access", "connect"] as const)
+      expect(stepApplies(step, signedOutOnAClaimedApp)).toBe(false);
+    expect(stepApplies("start", signedOutOnAClaimedApp)).toBe(true);
+    expect(currentSetupStep(signedOutOnAClaimedApp)).toBe("start");
+  });
+});
+
+describe("beingConfigured", () => {
+  const signedOut = (over: Partial<typeof configured> = {}) => ({
+    ...configured,
+    signedIn: false,
+    ...over,
+  });
+
+  it("holds a signed-out visitor while any question is unanswered", () => {
+    expect(beingConfigured(signedOut({ agent: "" }), false)).toBe(true);
+    expect(beingConfigured(signedOut({ agent: "" }), true)).toBe(true);
+    // Agent chosen, price question still open.
+    expect(beingConfigured(signedOut(), false)).toBe(true);
+  });
+
+  it("lets them through once the whole wizard is answered", () => {
+    expect(beingConfigured(signedOut(), true)).toBe(false);
+  });
+
+  it("never holds anyone with a session: the admin is mid-wizard, a member belongs here", () => {
+    expect(beingConfigured({ ...configured, agent: "" }, false)).toBe(false);
+    expect(beingConfigured(configured, false)).toBe(false);
+  });
+
+  it("leaves a fresh clone to the wizard: unclaimed is not being configured", () => {
+    expect(beingConfigured(fresh, false)).toBe(false);
+    expect(beingConfigured(signedOut({ platform: "", agent: "" }), false)).toBe(false);
   });
 });
 

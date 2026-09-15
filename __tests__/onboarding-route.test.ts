@@ -328,10 +328,25 @@ describe("POST /api/onboarding — the agent and the name", () => {
     const res = await POST(post({ agent: "uuid-1", name: "Acme Support" }));
 
     expect(res.status).toBe(200);
-    expect(metaWrites[0].body).toEqual({
-      metadata: { apps: { [slug]: { agent: "uuid-1", name: "Acme Support" } } },
+    expect(metaWrites[0].body.metadata.apps).toEqual({
+      [slug]: { agent: "uuid-1", name: "Acme Support" },
     });
     expect(await res.json()).toMatchObject({ platform: "acme", agent: "uuid-1", slug });
+  });
+
+  it("heads the platform's sign-in page with the name, in the same write", async () => {
+    stubFetch();
+    const { POST } = await load();
+    await POST(post({ platform: "acme" }));
+
+    await POST(post({ agent: "uuid-1", name: "Caveman Coach" }));
+
+    // The heading only — no price is decided at this step, and an omitted key
+    // keeps whatever the platform has stored.
+    expect(metaWrites[0].body.metadata.auth_web_mentorai).toEqual({
+      title: "Caveman Coach",
+      display_title_info: "Caveman Coach",
+    });
   });
 
   it("keeps the slug through a rename: the name step writes nothing locally", async () => {
@@ -344,9 +359,7 @@ describe("POST /api/onboarding — the agent and the name", () => {
     await POST(post({ name: "Acme Help" }));
 
     expect(storedRow()).toEqual(before);
-    expect(metaWrites[1].body).toEqual({
-      metadata: { apps: { [before!.slug]: { name: "Acme Help" } } },
-    });
+    expect(metaWrites[1].body.metadata.apps).toEqual({ [before!.slug]: { name: "Acme Help" } });
   });
 
   it("keeps the shared default for an app set up before slugs existed, minting nothing", async () => {
@@ -359,9 +372,7 @@ describe("POST /api/onboarding — the agent and the name", () => {
     await POST(post({ name: "Renamed" }));
 
     expect(storedRow()).toBeNull();
-    expect(metaWrites[0].body).toEqual({
-      metadata: { apps: { "vibe-agent": { name: "Renamed" } } },
-    });
+    expect(metaWrites[0].body.metadata.apps).toEqual({ "vibe-agent": { name: "Renamed" } });
   });
 
   it("keys by the Vercel project id on a hosting that was never set up locally", async () => {
@@ -375,8 +386,8 @@ describe("POST /api/onboarding — the agent and the name", () => {
     const res = await POST(post({ agent: "uuid-1", name: "Acme Support" }));
 
     expect(res.status).toBe(200);
-    expect(metaWrites[0].body).toEqual({
-      metadata: { apps: { prj_x: { agent: "uuid-1", name: "Acme Support" } } },
+    expect(metaWrites[0].body.metadata.apps).toEqual({
+      prj_x: { agent: "uuid-1", name: "Acme Support" },
     });
     expect(await res.json()).toMatchObject({ platform: "acme", slug: "prj_x" });
     expect(storedRow()).toBeNull();

@@ -53,13 +53,33 @@ export function currentSetupStep(a: Answered): SetupStep {
  * once one is stored — the platform is answered once and never changed, so a
  * stale link sends the visitor on. The rest stay reachable (the agent, the
  * name and the price are all editable after setup) but need a platform to ask
- * anything about.
+ * anything about, and a session to answer with: every screen past `start` saves
+ * on the admin's own token, so without one there is a question on screen that
+ * can only ever 401. `start` is where they go instead — it is the sign-in.
  */
 export function stepApplies(step: SetupStep, a: Answered): boolean {
   if (step === "start") return !a.signedIn;
+  if (!a.signedIn) return false;
   if (step === "platform") return !a.platform;
   return !!a.platform;
 }
+
+/**
+ * A visitor the app cannot serve yet, with no session to finish it with: they
+ * see the calm "being configured" screen, never the login SPA's join page, so
+ * nobody registers into an app that is still being set up.
+ *
+ * Three clauses, each load-bearing. **Signed out** — a signed-in admin must keep
+ * the whole tree: the screen is rendered without the SDK's `AuthProvider` (its
+ * redirect cannot be suppressed any other way), which also drops
+ * `TenantProvider`, the only thing that rewrites the `tenants` list every
+ * sign-in clears — a held admin would be told they are not one. **A platform** —
+ * a fresh clone is unclaimed, not mid-setup, and its first screen is the wizard.
+ * **Agent and {ready}** — the rest of the questions, `ready` being the price one
+ * (`resolveSetup` in lib/paywall.ts), which the browser cannot see for itself.
+ */
+export const beingConfigured = (a: Answered, ready: boolean): boolean =>
+  !a.signedIn && !!a.platform && !(a.agent && ready);
 
 /**
  * The steps the progress row counts: the ones from the first unanswered to the

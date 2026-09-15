@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Chat, type ChatConfig } from "@iblai/iblai-js/web-containers/next";
 import {
@@ -12,6 +11,7 @@ import {
   useCachedSessionId,
 } from "@iblai/iblai-js/web-utils";
 import { PayGate } from "@/components/pay-gate";
+import { LoadingScreen } from "@/components/loading-screen";
 import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
@@ -87,18 +87,22 @@ function AgentChat() {
     navigateToMentor: () => router.push("/"),
   };
 
+  // A member who is already signed in, on an app whose owner has not finished:
+  // the same words a signed-out visitor gets (`BeingConfigured` in the
+  // providers), and no link — /setup is the owner's, and it refuses them. An
+  // admin never reads this for long: the shell redirects them to the wizard.
   if (!mentorId) {
     return (
-      <p role="alert" className="p-8 text-sm text-destructive">
-        No agent is configured yet. A platform admin chooses one on{" "}
-        <Link className="underline underline-offset-4" href="/setup">
-          the setup screen
-        </Link>
-        .
-      </p>
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+        <p className="text-sm font-medium text-gray-900">This app is being configured</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Its owner is still setting it up. Check back soon.
+        </p>
+      </div>
     );
   }
-  if (!tenantKey || !sessionReady) return null;
+  // Signing in, or the platform still resolving: the arc, not a blank frame.
+  if (!tenantKey || !sessionReady) return <LoadingScreen className="min-h-0 flex-1" />;
 
   // The gate sits around the SDK's composer: an unpaid member's send opens the
   // pay modal instead (components/pay-gate.tsx).

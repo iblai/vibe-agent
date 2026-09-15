@@ -132,7 +132,7 @@ describe("writeAppPaymentInfo", () => {
     const { readAppPaymentInfo, writeAppPaymentInfo } = await loadPaywall();
 
     expect((await readAppPaymentInfo()).info).toBeNull();
-    await writeAppPaymentInfo("dm-abc", info() as never, "Acme");
+    await writeAppPaymentInfo("dm-abc", info() as never, {}, "Caveman Coach");
     expect((await readAppPaymentInfo()).info).toEqual(info());
 
     const [putUrl, putInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT") as [
@@ -144,14 +144,32 @@ describe("writeAppPaymentInfo", () => {
     expect(JSON.parse(putInit.body as string)).toEqual({
       metadata: {
         apps: { "demo-app": info() },
-        // A platform that says nothing yet is not left blank: the app's name
-        // (env, else the platform's) and the price line.
+        // A platform that says nothing yet is not left blank: the app's own
+        // name heads its sign-in page, and the price line goes under it.
         auth_web_mentorai: {
-          title: "Acme",
-          display_title_info: "Acme",
-          display_description_info: "$29/month",
+          title: "Caveman Coach",
+          display_title_info: "Caveman Coach",
+          display_description_info: "$29 a month, cancel any time",
         },
       },
+    });
+  });
+
+  it("writes no heading at all when the app has no name of its own", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ platform_key: "testorg", platform_name: "x7f3k9q2", metadata: {} }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { writeAppPaymentInfo } = await loadPaywall();
+
+    await writeAppPaymentInfo("dm-abc", info() as never);
+
+    // The platform's name used to fill in here, which on a platform made through
+    // ibl.ai's $0 sign-up is a random key — and this function's own "only when
+    // it has none" rule then pinned it there for good.
+    const [, putInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(putInit.body as string).metadata.auth_web_mentorai).toEqual({
+      display_description_info: "$29 a month, cancel any time",
     });
   });
 
@@ -162,16 +180,21 @@ describe("writeAppPaymentInfo", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { writeAppPaymentInfo } = await loadPaywall();
 
-    await writeAppPaymentInfo("dm-abc", info() as never, "Acme", {
-      title: "Search Craft",
-      display_title_info: "Search Craft",
-      display_description_info: "Learn the craft, earn the traffic",
-    });
+    await writeAppPaymentInfo(
+      "dm-abc",
+      info() as never,
+      {
+        title: "Search Craft",
+        display_title_info: "Search Craft",
+        display_description_info: "Learn the craft, earn the traffic",
+      },
+      "Caveman Coach",
+    );
 
     const [, putInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     // Neither title is in the body at all: the platform's merge keeps them.
     expect(JSON.parse(putInit.body as string).metadata.auth_web_mentorai).toEqual({
-      display_description_info: "Learn the craft, earn the traffic · $29/month",
+      display_description_info: "Learn the craft, earn the traffic · $29 a month, cancel any time",
     });
   });
 
@@ -182,19 +205,16 @@ describe("writeAppPaymentInfo", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { writeAppPaymentInfo } = await loadPaywall();
 
-    await writeAppPaymentInfo(
-      "dm-abc",
-      info({ amount: 4900, access: "one_time" }) as never,
-      "Acme",
-      {
-        display_description_info: "Learn the craft, earn the traffic · $29/month",
-      },
-    );
+    await writeAppPaymentInfo("dm-abc", info({ amount: 4900, access: "one_time" }) as never, {
+      // The bare form an older release left: still recognised, so it is swapped
+      // rather than stacked under a second one.
+      display_description_info: "Learn the craft, earn the traffic · $29/month",
+    });
 
     const [, putInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(
       JSON.parse(putInit.body as string).metadata.auth_web_mentorai.display_description_info,
-    ).toBe("Learn the craft, earn the traffic · $49");
+    ).toBe("Learn the craft, earn the traffic · Unlock for $49");
   });
 
   it("passes the DM's refusal through", async () => {
@@ -205,7 +225,7 @@ describe("writeAppPaymentInfo", () => {
       ),
     );
     const { writeAppPaymentInfo, PaywallUpstreamError } = await loadPaywall();
-    await expect(writeAppPaymentInfo("dm-abc", info() as never, "Acme")).rejects.toBeInstanceOf(
+    await expect(writeAppPaymentInfo("dm-abc", info() as never)).rejects.toBeInstanceOf(
       PaywallUpstreamError,
     );
   });
