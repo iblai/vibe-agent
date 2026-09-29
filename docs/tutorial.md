@@ -88,13 +88,13 @@ _Three answers. Free needs no Stripe, ever._
 - **One-time fee** — pay once, keep access. A price box appears; enter it in US dollars.
 - **Monthly fee** — a subscription, cancelled any time. Enter the monthly price. Search Craft charges 29.90.
 
-You can change this any time (chapter 6 shows where). Press Save. For a paid answer, one more screen comes first.
+You can change this any time (chapter 6 shows where). For free access, press Save. For a paid answer the same button reads **Connect with Stripe** — the next chapter.
 
 ## 4. Connect Stripe (paid only)
 
-![Monetize Your Agent — one button](tutorial/03-monetize-your-agent.png)
+![The price question, its button reading Connect with Stripe](tutorial/03-monetize-your-agent.png)
 
-_One button. Nothing to copy, nothing to type._
+_One button, on the same screen. Nothing to copy, nothing to type._
 
 Press **Connect with Stripe**. Stripe opens and asks which of your Stripe accounts to connect to ibl.ai — pick one, or make a new one right there.
 

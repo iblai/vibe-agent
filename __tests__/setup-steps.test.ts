@@ -31,9 +31,9 @@ describe("currentSetupStep", () => {
     expect(currentSetupStep(configured)).toBe("access");
   });
 
-  it("is never connect: that screen is reached from access, for a paid answer", () => {
-    for (const state of [fresh, signedIn, withPlatform, configured])
-      expect(currentSetupStep(state)).not.toBe("connect");
+  it("ends at access: connecting Stripe is that step's own button, not a step", () => {
+    expect(currentSetupStep(configured)).toBe("access");
+    expect(isSetupStep("connect")).toBe(false);
   });
 });
 
@@ -49,8 +49,8 @@ describe("stepApplies", () => {
     expect(currentSetupStep(withPlatform)).not.toBe("platform");
   });
 
-  it("keeps the agent, the price and Stripe reachable, but only with a platform", () => {
-    for (const step of ["agent", "access", "connect"] as const) {
+  it("keeps the agent and the price reachable, but only with a platform", () => {
+    for (const step of ["agent", "access"] as const) {
       expect(stepApplies(step, configured)).toBe(true);
       expect(stepApplies(step, signedIn)).toBe(false);
     }
@@ -60,7 +60,7 @@ describe("stepApplies", () => {
     // Otherwise a signed-out visitor who types /setup/access is handed a
     // question whose Save can only ever answer 401.
     const signedOutOnAClaimedApp = { ...configured, signedIn: false };
-    for (const step of ["platform", "agent", "access", "connect"] as const)
+    for (const step of ["platform", "agent", "access"] as const)
       expect(stepApplies(step, signedOutOnAClaimedApp)).toBe(false);
     expect(stepApplies("start", signedOutOnAClaimedApp)).toBe(true);
     expect(currentSetupStep(signedOutOnAClaimedApp)).toBe("start");
@@ -97,10 +97,8 @@ describe("beingConfigured", () => {
 });
 
 describe("stepSequence", () => {
-  const counts = (state: typeof fresh & { needsConnect?: boolean }) =>
-    (["start", "platform", "agent", "access"] as const).map((step) =>
-      stepProgress(step, { needsConnect: false, ...state }),
-    );
+  const counts = (state: typeof fresh) =>
+    (["start", "platform", "agent", "access"] as const).map((step) => stepProgress(step, state));
 
   it("counts a first run as four, and does not shrink at sign-in", () => {
     // The lie this replaces: the Start screen said 1 of 4 and the platform step
@@ -111,33 +109,21 @@ describe("stepSequence", () => {
     expect(counts(signedIn)[3]).toEqual({ totalSteps: 4, currentStep: 4 });
   });
 
-  it("adds Stripe as a fifth when a paid answer has no source yet", () => {
-    const paid = { ...signedIn, needsConnect: true };
-    expect(stepProgress("access", paid)).toEqual({ totalSteps: 5, currentStep: 4 });
-    expect(stepProgress("connect", paid)).toEqual({ totalSteps: 5, currentStep: 5 });
-  });
-
-  it("counts the connect screen when it is the one being shown", () => {
-    // Reached before the platform's Stripe source is known.
-    expect(stepProgress("connect", { ...configured, needsConnect: false })).toEqual({
-      totalSteps: 2,
-      currentStep: 2,
-    });
+  it("never adds a fifth: a paid answer with no Stripe source connects from the access step", () => {
+    expect(stepProgress("access", signedIn)).toEqual({ totalSteps: 4, currentStep: 4 });
+    expect(stepSequence("access", configured)).toEqual(["access"]);
   });
 
   it("is one step for an admin reopening the price question", () => {
-    expect(stepProgress("access", { ...configured, needsConnect: false })).toEqual({
+    expect(stepProgress("access", configured)).toEqual({
       totalSteps: 1,
       currentStep: 1,
     });
   });
 
   it("is two when they reopen the agent from the quiet link", () => {
-    expect(stepSequence("agent", { ...configured, needsConnect: false })).toEqual([
-      "agent",
-      "access",
-    ]);
-    expect(stepProgress("agent", { ...configured, needsConnect: false })).toEqual({
+    expect(stepSequence("agent", configured)).toEqual(["agent", "access"]);
+    expect(stepProgress("agent", configured)).toEqual({
       totalSteps: 2,
       currentStep: 1,
     });
@@ -145,7 +131,7 @@ describe("stepSequence", () => {
 });
 
 describe("setupPath", () => {
-  it("is the route the step lives at, and only the five are steps", () => {
+  it("is the route the step lives at, and only the four are steps", () => {
     expect(setupPath("access")).toBe("/setup/access");
     expect(isSetupStep("access")).toBe(true);
     expect(isSetupStep("question")).toBe(false);

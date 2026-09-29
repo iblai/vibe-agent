@@ -11,7 +11,7 @@ import config from "./iblai/config";
 import { hasNonExpiredAuthToken } from "./iblai/auth-utils";
 import { resolveAppTenant } from "./iblai/tenant";
 
-export const SETUP_STEPS = ["start", "platform", "agent", "access", "connect"] as const;
+export const SETUP_STEPS = ["start", "platform", "agent", "access"] as const;
 
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
@@ -37,9 +37,9 @@ export const readAnswered = (): Answered => ({
 });
 
 /**
- * The step the app is on: the first thing still unanswered. `connect` is never
- * it — that screen is only reached from `access`, and only for a paid answer on
- * a platform with no Stripe source yet.
+ * The step the app is on: the first thing still unanswered. Connecting Stripe
+ * is not a step — it is the `access` step's own button, for a paid answer on a
+ * platform with no Stripe source yet.
  */
 export function currentSetupStep(a: Answered): SetupStep {
   if (!a.signedIn) return "start";
@@ -87,13 +87,9 @@ export const beingConfigured = (a: Answered, ready: boolean): boolean =>
  * admin reopening the price question alone reads 1 of 1.
  *
  * {step} is in the list even when it is answered — that is how the agent step
- * counts when it is reopened from the quiet link, and how `connect` counts
- * before the Stripe source is known.
+ * counts when it is reopened from the quiet link.
  */
-export function stepSequence(
-  step: SetupStep,
-  a: Answered & { needsConnect: boolean },
-): SetupStep[] {
+export function stepSequence(step: SetupStep, a: Answered): SetupStep[] {
   const steps: SetupStep[] = [];
   // Signing in and choosing a platform are one stretch: the visitor who sees
   // Start has all four ahead of them, and the count must not shrink when they
@@ -101,14 +97,13 @@ export function stepSequence(
   if (!a.platform) steps.push("start", "platform");
   if (!a.agent || step === "agent") steps.push("agent");
   steps.push("access");
-  if (a.needsConnect || step === "connect") steps.push("connect");
   return steps;
 }
 
 /** {totalSteps, currentStep} for the SDK's OnboardingShell. */
 export function stepProgress(
   step: SetupStep,
-  a: Answered & { needsConnect: boolean },
+  a: Answered,
 ): { totalSteps: number; currentStep: number } {
   const steps = stepSequence(step, a);
   return { totalSteps: steps.length, currentStep: Math.max(steps.indexOf(step), 0) + 1 };

@@ -37,17 +37,11 @@ export function StartScreen() {
     window.location.href = url();
   };
 
-  const start = leaveFor("Opening sign-in…", () =>
-    authLoginUrl(window.location.origin),
-  );
-  const register = leaveFor("Opening ibl.ai…", () =>
-    createPlatformUrl(window.location.origin),
-  );
+  const start = leaveFor("Opening sign-in…", () => authLoginUrl(window.location.origin));
+  const register = leaveFor("Opening ibl.ai…", () => createPlatformUrl(window.location.origin));
 
   return (
-    <OnboardingShell
-      {...stepProgress("start", { ...readAnswered(), needsConnect: false })}
-    >
+    <OnboardingShell {...stepProgress("start", readAnswered())}>
       {busy && <LoadingScreen overlay message={busy} />}
       <StepHeader
         title="Set up your app"
@@ -77,11 +71,7 @@ export function StartScreen() {
         <button
           type="button"
           disabled={!!busy}
-          className={
-            platformFixed
-              ? onboardingPrimaryButtonClass
-              : onboardingSecondaryButtonClass
-          }
+          className={platformFixed ? onboardingPrimaryButtonClass : onboardingSecondaryButtonClass}
           onClick={start}
         >
           {platformFixed ? "Start" : "Already have an account? Login instead."}

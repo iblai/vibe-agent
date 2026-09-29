@@ -111,18 +111,18 @@ function setupMessage(e: unknown): string {
 }
 
 /**
- * The wizard's four questions, one component, one step per route: which
- * platform, which agent and what the app is called, how people get in, and —
- * for a paid answer on a platform with no Stripe source yet — Connect with
- * Stripe (the platform's own OAuth flow; the admin signs in on Stripe and comes
- * back to /setup/connect). Nothing is ever typed or copied. Save then lets
- * /api/paywall/admin/setup create the product and price on that account and
- * record the choice.
+ * The wizard's three questions after Start, one component, one step per route:
+ * which platform, which agent and what the app is called, and how people get
+ * in — where a paid answer on a platform with no Stripe source yet has Connect
+ * with Stripe as its button (the platform's own OAuth flow; the admin signs in
+ * on Stripe, comes back to /setup/access, and the answer saves itself). Nothing
+ * is ever typed or copied. Save then lets /api/paywall/admin/setup create the
+ * product and price on that account and record the choice.
  *
  * The step is the URL, not state: `lib/setup-steps.ts` owns the order, and
  * moving between steps is navigation, so a reload keeps its place and Back
- * works. The screens share one component because the price step and the Stripe
- * step share the answer in progress.
+ * works. The screens share one component because they share the answer in
+ * progress and the platform's Stripe status.
  */
 export function SetupScreen({ step }: { step: SetupStep }) {
   const router = useRouter();
@@ -190,19 +190,16 @@ export function SetupScreen({ step }: { step: SetupStep }) {
   // What each step has to do on arrival. Every step is its own route, so this
   // runs once per step, on the step that owns the work.
   useEffect(() => {
-    if (!platform || (step !== "access" && step !== "connect")) return;
+    if (!platform || step !== "access") return;
 
-    // The answer in progress, stashed before leaving this page — for Stripe, or
-    // only for the step next door. Both steps read it: without it, Back from
-    // Stripe's screen would forget what was chosen.
+    // The answer in progress, stashed before leaving this page for Stripe.
+    // Consumed here: an abandoned answer must not outlive the visit and
+    // preselect itself over what is actually saved.
     const pending = readPending();
     if (pending) {
       setAccess(pending.access);
       setAmount(pending.amount);
-      // Consumed here, kept on the Stripe step: that one still needs it when
-      // the consent page returns. Otherwise an abandoned answer would outlive
-      // the visit and preselect itself over what is actually saved.
-      if (step === "access") sessionStorage.removeItem(PENDING_KEY);
+      sessionStorage.removeItem(PENDING_KEY);
     }
     // Back from Stripe's consent page, which returns to the step that sent them.
     if (returned) router.replace(setupPath(step));
@@ -287,7 +284,6 @@ export function SetupScreen({ step }: { step: SetupStep }) {
     signedIn: true,
     platform,
     agent: agentId,
-    needsConnect: connectMissing,
   });
 
   const cents = Math.round(Number(amount) * 100);
@@ -379,9 +375,10 @@ export function SetupScreen({ step }: { step: SetupStep }) {
       return;
     }
     setError("");
+    // No Stripe source yet: the button reads Connect with Stripe, and that is
+    // what it does — the answer rides along and saves itself on the return.
     if (connectMissing) {
-      stashPending();
-      router.push(setupPath("connect"));
+      await startConnect();
       return;
     }
     await save(access, amount);
@@ -393,19 +390,20 @@ export function SetupScreen({ step }: { step: SetupStep }) {
     setBusy("Redirecting to Stripe…");
     setError("");
     try {
-      const { authorize_url } = await paywallFetch<{ authorize_url: string }>(CONNECT_ROUTE, {
+      const { authorize_url } = await paywallFetch<{ authorize_url?: string }>(CONNECT_ROUTE, {
         method: "POST",
-        // Stripe's consent returns to the step that sent them there: this one
-        // holds the retry button, and a failure has to show where it can be
-        // acted on.
-        json: { return_url: `${window.location.origin}${setupPath("connect")}` },
+        // Stripe's consent returns to the price step, the one screen: it holds
+        // the retry button, and a failure has to show where it can be acted on.
+        json: { return_url: `${window.location.origin}${setupPath("access")}` },
       });
+      if (!authorize_url) throw new Error("The platform answered without Stripe’s address.");
       window.location.href = authorize_url;
     } catch (e) {
       // Connected after all (another tab, an earlier round trip): go on.
       if (e instanceof PaywallRequestError && e.status === 409) {
         loadStatus().catch((err: unknown) => setError(setupMessage(err)));
         if (access) await save(access, amount);
+        else setBusy("");
         return;
       }
       setError(setupMessage(e));
@@ -710,7 +708,7 @@ export function SetupScreen({ step }: { step: SetupStep }) {
             disabled={!access || !!busy || (paid && !status)}
             className={`mt-6 ${onboardingPrimaryButtonClass}`}
           >
-            {busy ? "Saving…" : connectMissing ? "Continue" : "Save"}
+            {busy || (connectMissing ? "Connect with Stripe" : "Save")}
           </button>
           {status?.source === "connected" && (
             <p className="mt-4 text-center text-xs text-muted-foreground">
@@ -759,28 +757,6 @@ export function SetupScreen({ step }: { step: SetupStep }) {
             </p>
           )}
         </form>
-      )}
-      {step === "connect" && (
-        <div>
-          <StepHeader
-            title="Monetize Your Agent"
-            subtitle="Connect your Stripe account. Payments go straight to it; nothing to copy."
-          />
-          {errorLine}
-          <div className="mt-6 space-y-3">
-            <button
-              type="button"
-              disabled={!!busy}
-              className={onboardingPrimaryButtonClass}
-              onClick={startConnect}
-            >
-              Connect with Stripe
-            </button>
-            <button type="button" className={onboardingSecondaryButtonClass} onClick={back}>
-              Back
-            </button>
-          </div>
-        </div>
       )}
     </OnboardingShell>
   );

@@ -332,7 +332,7 @@ of users:
   the admin redirect in the app shell, the quiet "Payments setup" link on
   `/account`, the no-agent alert on `/`, the return path saved before signing in.
   A reload keeps its place, Back moves between questions, a step can be linked
-  to, and Stripe's consent comes back to `/setup/connect` with
+  to, and Stripe's consent comes back to `/setup/access` with
   `?stripe_connect=`, the step that owns it and where the retry button is.
   ibl.ai's $0 sign-up returns to none of them: the account it makes has no
   session in this browser, so a return landing on a page of this app would be an
@@ -629,11 +629,11 @@ while the question is unanswered (`sessionStorage` key `paywall_setup_ok_at`).
 The screen (`components/setup/setup-screen.tsx`) pre-selects the current answer
 and shows the price only for a paid choice. For a paid answer while the
 platform has no Stripe source (`GET /api/paywall/admin/connect` →
-`source: null`), a second screen holds one button, Connect with Stripe: the
-answer in progress is stashed in `sessionStorage` (`paywall_setup_pending`),
-the browser leaves for Stripe's authorize URL and comes back to
-`/setup?stripe_connect=…`, where the screen restores the answer, cleans the
-URL and — connected — saves at once. It posts `{access, amount}` with an
+`source: null`), the button itself reads Connect with Stripe: the answer in
+progress is stashed in `sessionStorage` (`paywall_setup_pending`), the
+browser leaves for Stripe's authorize URL and comes back to
+`/setup/access?stripe_connect=…`, where the screen restores the answer, cleans
+the URL and — connected — saves at once. It posts `{access, amount}` with an
 `Idempotency-Key` the route suffixes per Stripe call. Under Save, the footer
 says what payments run on: the connected account (with a quiet Disconnect),
 the platform's own key, or that Connect is not available on this platform
@@ -643,7 +643,7 @@ Where to change what: how the modal looks, `components/pay-modal.tsx`; when
 it opens, `components/pay-gate.tsx`; what the platform is asked from the
 browser, `lib/paywall-client.ts`; what the login SPA shows and what of it
 this app may touch, `loginBranding()` in `lib/paywall.ts`; the setup order, `app/api/paywall/admin/setup/route.ts`;
-the question's and the connect screen's copy, `components/setup/`.
+the question's copy, Connect with Stripe included, `components/setup/`.
 
 ### The send gate and SDK bumps
 
@@ -848,7 +848,7 @@ the flag off.
   `metadata.app = <slug>`; nothing else is configured on the DM. The OS's
   Monetization tab is Stripe Connect item paywalls (mentors, courses; the
   billing app) — a different system. The platform's Stripe source is the
-  account linked with Connect with Stripe (this app's Monetize screen, the
+  account linked with Connect with Stripe (this app's price step, the
   DM's own OAuth flow, `…/providers/stripe/connect/`) or a `stripe`
   integration credential pasted in the OS, which wins when set.
 - A 403 `Permission denied` on the member's own `paywall/checkout/` or
