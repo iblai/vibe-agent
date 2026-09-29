@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.12.0](https://github.com/iblai/vibe-agent/compare/v1.11.0...v1.12.0) (2026-09-29)
+
+### Features
+
+* **setup:** connect Stripe from the price screen's own button; drop the pay modal's heading ([c6b777c](https://github.com/iblai/vibe-agent/commit/c6b777c48a446fc4d1c0ed0001923e4892f016b2))
+
 ## [1.11.0](https://github.com/iblai/vibe-agent/compare/v1.10.1...v1.11.0) (2026-09-15)
 
 ### Features
